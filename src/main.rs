@@ -39,7 +39,7 @@ fn main() -> eyre::Result<()> {
             let (node, engine_handle_tx) = HlNode::new(ext.block_source_args.parse().await?);
             let NodeHandle { node, node_exit_future: exit_future } = builder
                 .node(node)
-                .extend_rpc_modules(move |ctx| {
+                .extend_rpc_modules(move |mut ctx| {
                     let upstream_rpc_url =
                         ext.upstream_rpc_url.unwrap_or_else(|| default_upstream_rpc_url.to_owned());
 
@@ -60,8 +60,13 @@ fn main() -> eyre::Result<()> {
                     }
 
                     if ext.hl_node_compliant {
-                        install_hl_node_compliance(ctx)?;
+                        install_hl_node_compliance(&mut ctx)?;
                         info!("hl-node compliant mode enabled");
+                    }
+
+                    if !ext.experimental_eth_get_proof {
+                        ctx.modules.remove_method_from_configured("eth_getProof");
+                        info!("eth_getProof is disabled by default");
                     }
 
                     Ok(())
