@@ -55,6 +55,24 @@ pub struct HlNodeArgs {
     /// This is useful when read precompile is needed for gas estimation.
     #[arg(long, env = "FORWARD_CALL")]
     pub forward_call: bool,
+
+    /// Experimental: enables the eth_getProof RPC method.
+    ///
+    /// Note: Due to the state root difference, trie updates* may not function correctly in all
+    /// scenarios. For example, incremental root updates are not possible, which can cause
+    /// eth_getProof to malfunction in some cases.
+    ///
+    /// This limitation does not impact normal node functionality, except for state root (which is
+    /// unused) and eth_getProof. The archival state is maintained by block order, not by trie
+    /// updates. As a precaution, nanoreth disables eth_getProof by default to prevent
+    /// potential issues.
+    ///
+    /// Use --experimental-eth-get-proof to forcibly enable eth_getProof, assuming trie updates are
+    /// working as intended. Enabling this by default will be tracked in #15.
+    ///
+    /// * Refers to the Merkle trie used for eth_getProof and state root, not actual state values.
+    #[arg(long, env = "EXPERIMENTAL_ETH_GET_PROOF")]
+    pub experimental_eth_get_proof: bool,
 }
 
 /// The main reth_hl cli interface.

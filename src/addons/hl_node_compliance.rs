@@ -659,7 +659,7 @@ where
 }
 
 pub fn install_hl_node_compliance<Node, EthApi>(
-    ctx: RpcContext<Node, EthApi>,
+    ctx: &mut RpcContext<Node, EthApi>,
 ) -> Result<(), eyre::Error>
 where
     Node: FullNodeComponents,
