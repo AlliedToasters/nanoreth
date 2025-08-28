@@ -152,13 +152,14 @@ impl<BS: BlockSource> PseudoPeer<BS> {
     async fn collect_blocks(
         &self,
         block_numbers: impl IntoIterator<Item = u64>,
-    ) -> Vec<BlockAndReceipts> {
+    ) -> eyre::Result<Vec<BlockAndReceipts>> {
         let block_numbers = block_numbers.into_iter().collect::<Vec<_>>();
-        futures::stream::iter(block_numbers)
-            .map(async |number| self.collect_block(number).await.unwrap())
+        let res = futures::stream::iter(block_numbers)
+            .map(async |number| self.collect_block(number).await)
             .buffered(self.block_source.recommended_chunk_size() as usize)
             .collect::<Vec<_>>()
-            .await
+            .await;
+        res.into_iter().collect()
     }
 
     pub async fn process_eth_request(
@@ -185,7 +186,7 @@ impl<BS: BlockSource> PseudoPeer<BS> {
                     HeadersDirection::Falling => {
                         self.collect_blocks((number + 1 - limit..number + 1).rev()).await
                     }
-                }
+                }?
                 .into_par_iter()
                 .map(|block| block.to_reth_block(chain_id).header.clone())
                 .collect::<Vec<_>>();
@@ -203,7 +204,7 @@ impl<BS: BlockSource> PseudoPeer<BS> {
 
                 let block_bodies = self
                     .collect_blocks(numbers)
-                    .await
+                    .await?
                     .into_iter()
                     .map(|block| block.to_reth_block(chain_id).body)
                     .collect::<Vec<_>>();
@@ -340,7 +341,7 @@ impl<BS: BlockSource> PseudoPeer<BS> {
 
         debug!("Backfilling from {start_number} to {end_number}");
         // Collect blocks and cache them
-        let blocks = self.collect_blocks(uncached_block_numbers).await;
+        let blocks = self.collect_blocks(uncached_block_numbers).await?;
         let block_map: HashMap<B256, u64> =
             blocks.into_iter().map(|block| (block.hash(), block.number())).collect();
         let maybe_block_number = block_map.get(&target_hash).copied();
