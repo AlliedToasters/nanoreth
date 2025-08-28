@@ -12,7 +12,7 @@ pub mod utils;
 
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{error, info};
 
 pub use cli::*;
 pub use config::*;
@@ -78,8 +78,11 @@ pub async fn start_pseudo_peer(
             _ = transaction_rx.recv() => {}
 
             Some(eth_req) = eth_rx.recv() => {
-                service.process_eth_request(eth_req).await?;
-                info!("Processed eth request");
+                if let Err(e) = service.process_eth_request(eth_req).await {
+                    error!("Error processing eth request: {e:?}");
+                } else {
+                    info!("Processed eth request");
+                }
             }
         }
     }
