@@ -32,6 +32,8 @@ mod factory;
 mod patch;
 pub mod receipt_builder;
 
+pub use executor::apply_precompiles;
+
 /// HL EVM implementation.
 ///
 /// This is a wrapper type around the `revm` evm with optional [`Inspector`] (tracing)
