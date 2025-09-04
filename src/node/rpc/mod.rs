@@ -1,3 +1,9 @@
+use crate::{
+    chainspec::HlChainSpec,
+    node::{evm::apply_precompiles, types::HlExtras},
+    HlBlock, HlPrimitives,
+};
+use alloy_evm::Evm;
 use alloy_network::Ethereum;
 use alloy_primitives::U256;
 use reth::{
@@ -18,8 +24,9 @@ use reth::{
         TaskSpawner,
     },
 };
-use reth_evm::ConfigureEvm;
-use reth_provider::{ChainSpecProvider, ProviderHeader, ProviderTx};
+use reth_evm::{ConfigureEvm, Database, EvmEnvFor, HaltReasonFor, InspectorFor, TxEnvFor};
+use reth_primitives::NodePrimitives;
+use reth_provider::{BlockReader, ChainSpecProvider, ProviderError, ProviderHeader, ProviderTx};
 use reth_rpc::RpcTypes;
 use reth_rpc_eth_api::{
     helpers::{
@@ -29,17 +36,18 @@ use reth_rpc_eth_api::{
     EthApiTypes, FromEvmError, RpcConvert, RpcConverter, RpcNodeCore, RpcNodeCoreExt,
     SignableTxRequest,
 };
+use revm::context::result::ResultAndState;
 use std::{fmt, marker::PhantomData, sync::Arc};
-
-use crate::chainspec::HlChainSpec;
 
 mod block;
 mod call;
 pub mod engine_api;
 mod transaction;
 
+pub trait HlRpcNodeCore: RpcNodeCore<Primitives: NodePrimitives<Block = HlBlock>> {}
+
 /// Container type `HlEthApi`
-pub(crate) struct HlEthApiInner<N: RpcNodeCore, Rpc: RpcConvert> {
+pub(crate) struct HlEthApiInner<N: HlRpcNodeCore, Rpc: RpcConvert> {
     /// Gateway to node's core components.
     pub(crate) eth_api: EthApiInner<N, Rpc>,
 }
@@ -48,14 +56,14 @@ type HlRpcConvert<N, NetworkT> =
     RpcConverter<NetworkT, <N as FullNodeComponents>::Evm, EthReceiptConverter<HlChainSpec>>;
 
 #[derive(Clone)]
-pub struct HlEthApi<N: RpcNodeCore, Rpc: RpcConvert> {
+pub struct HlEthApi<N: HlRpcNodeCore, Rpc: RpcConvert> {
     /// Gateway to node's core components.
     pub(crate) inner: Arc<HlEthApiInner<N, Rpc>>,
 }
 
 impl<N, Rpc> fmt::Debug for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -65,7 +73,7 @@ where
 
 impl<N, Rpc> EthApiTypes for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
     type Error = EthApiError;
@@ -79,7 +87,7 @@ where
 
 impl<N, Rpc> RpcNodeCore for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives>,
 {
     type Primitives = N::Primitives;
@@ -111,7 +119,7 @@ where
 
 impl<N, Rpc> RpcNodeCoreExt for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
     #[inline]
@@ -122,7 +130,7 @@ where
 
 impl<N, Rpc> EthApiSpec for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
     type Transaction = ProviderTx<Self::Provider>;
@@ -141,7 +149,7 @@ where
 
 impl<N, Rpc> SpawnBlocking for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
     #[inline]
@@ -162,7 +170,7 @@ where
 
 impl<N, Rpc> LoadFee for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
@@ -179,14 +187,14 @@ where
 
 impl<N, Rpc> LoadState for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
 }
 
 impl<N, Rpc> EthState for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
     #[inline]
@@ -197,7 +205,7 @@ where
 
 impl<N, Rpc> EthFees for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
@@ -205,15 +213,50 @@ where
 
 impl<N, Rpc> Trace for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
+    fn inspect<DB, I>(
+        &self,
+        db: DB,
+        evm_env: EvmEnvFor<Self::Evm>,
+        tx_env: TxEnvFor<Self::Evm>,
+        inspector: I,
+    ) -> Result<ResultAndState<HaltReasonFor<Self::Evm>>, Self::Error>
+    where
+        DB: Database<Error = ProviderError>,
+        I: InspectorFor<Self::Evm, DB>,
+    {
+        let block_number = evm_env.block_env().number;
+        let hl_extras = self.get_hl_extras(block_number.try_into().unwrap())?;
+
+        let mut evm = self.evm_config().evm_with_env_and_inspector(db, evm_env, inspector);
+        apply_precompiles(&mut evm, &hl_extras);
+        evm.transact(tx_env).map_err(Self::Error::from_evm_err)
+    }
+}
+
+impl<N, Rpc> HlEthApi<N, Rpc>
+where
+    N: HlRpcNodeCore,
+    Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
+{
+    fn get_hl_extras(&self, block_number: u64) -> Result<HlExtras, ProviderError> {
+        Ok(self
+            .provider()
+            .block_by_number(block_number)?
+            .map(|block| HlExtras {
+                read_precompile_calls: block.body.read_precompile_calls.clone(),
+                highest_precompile_address: block.body.highest_precompile_address,
+            })
+            .unwrap_or_default())
+    }
 }
 
 impl<N, Rpc> AddDevSigners for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     Rpc: RpcConvert<
         Network: RpcTypes<TransactionRequest: SignableTxRequest<ProviderTx<N::Provider>>>,
     >,
@@ -239,7 +282,7 @@ impl<NetworkT> Default for HlEthApiBuilder<NetworkT> {
 
 impl<N, NetworkT> EthApiBuilder<N> for HlEthApiBuilder<NetworkT>
 where
-    N: FullNodeComponents<Types: NodeTypes<ChainSpec = HlChainSpec>>
+    N: FullNodeComponents<Types: NodeTypes<ChainSpec = HlChainSpec, Primitives = HlPrimitives>>
         + RpcNodeCore<
             Primitives = PrimitivesTy<N::Types>,
             Evm: ConfigureEvm<NextBlockEnvCtx: BuildPendingEnv<HeaderTy<N::Types>>>,
