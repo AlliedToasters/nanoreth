@@ -212,10 +212,6 @@ impl From<EthereumTxEnvelope<TxEip4844WithSidecar<BlobTransactionSidecarVariant>
 impl Compress for TransactionSigned {
     type Compressed = Vec<u8>;
 
-    fn compress(self) -> Self::Compressed {
-        self.into_inner().compress()
-    }
-
     fn compress_to_buf<B: bytes::BufMut + AsMut<[u8]>>(&self, buf: &mut B) {
         self.inner().compress_to_buf(buf);
     }
