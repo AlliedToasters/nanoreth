@@ -1,4 +1,4 @@
-use crate::node::rpc::HlEthApi;
+use crate::node::rpc::{HlEthApi, HlRpcNodeCore};
 use reth::rpc::server_types::eth::{
     builder::config::PendingBlockKind, error::FromEvmError, EthApiError, PendingBlock,
 };
@@ -6,12 +6,12 @@ use reth_rpc_eth_api::{
     helpers::{
         pending_block::PendingEnvBuilder, EthBlocks, LoadBlock, LoadPendingBlock, LoadReceipt,
     },
-    RpcConvert, RpcNodeCore,
+    RpcConvert,
 };
 
 impl<N, Rpc> EthBlocks for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
@@ -19,7 +19,7 @@ where
 
 impl<N, Rpc> LoadBlock for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
@@ -27,7 +27,7 @@ where
 
 impl<N, Rpc> LoadPendingBlock for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
@@ -49,7 +49,7 @@ where
 
 impl<N, Rpc> LoadReceipt for HlEthApi<N, Rpc>
 where
-    N: RpcNodeCore,
+    N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {

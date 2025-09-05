@@ -4,7 +4,7 @@ use crate::{
     hardforks::HlHardforks,
     node::{
         primitives::TransactionSigned,
-        types::{ReadPrecompileInput, ReadPrecompileResult},
+        types::{HlExtras, ReadPrecompileInput, ReadPrecompileResult},
     },
 };
 use alloy_consensus::{Transaction, TxReceipt};
@@ -102,7 +102,7 @@ where
 {
     /// Creates a new HlBlockExecutor.
     pub fn new(mut evm: EVM, ctx: HlBlockExecutionCtx<'a>, spec: Spec, receipt_builder: R) -> Self {
-        apply_precompiles(&mut evm, &ctx);
+        apply_precompiles(&mut evm, &ctx.extras);
         Self { spec, evm, gas_used: 0, receipts: vec![], receipt_builder, ctx }
     }
 
@@ -155,7 +155,7 @@ where
     type Evm = E;
 
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError> {
-        apply_precompiles(&mut self.evm, &self.ctx);
+        apply_precompiles(&mut self.evm, &self.ctx.extras);
         self.deploy_corewriter_contract()?;
 
         Ok(())
@@ -240,10 +240,9 @@ where
     }
 }
 
-fn apply_precompiles<'a, DB, EVM>(evm: &mut EVM, ctx: &HlBlockExecutionCtx<'a>)
+pub fn apply_precompiles<EVM>(evm: &mut EVM, extras: &HlExtras)
 where
-    EVM: Evm<DB = &'a mut State<DB>, Precompiles = PrecompilesMap>,
-    DB: Database + 'a,
+    EVM: Evm<Precompiles = PrecompilesMap>,
 {
     let block_number = evm.block().number;
     let precompiles_mut = evm.precompiles_mut();
@@ -255,9 +254,7 @@ where
             precompiles_mut.apply_precompile(&address, |_| None);
         }
     }
-    for (address, precompile) in
-        ctx.extras.read_precompile_calls.clone().unwrap_or_default().0.iter()
-    {
+    for (address, precompile) in extras.read_precompile_calls.clone().unwrap_or_default().0.iter() {
         let precompile = precompile.clone();
         precompiles_mut.apply_precompile(address, |_| {
             let precompiles_map: HashMap<ReadPrecompileInput, ReadPrecompileResult> =
@@ -271,7 +268,7 @@ where
     // NOTE: This is adapted from hyperliquid-dex/hyper-evm-sync#5
     const WARM_PRECOMPILES_BLOCK_NUMBER: u64 = 8_197_684;
     if block_number >= U256::from(WARM_PRECOMPILES_BLOCK_NUMBER) {
-        fill_all_precompiles(ctx, precompiles_mut);
+        fill_all_precompiles(extras, precompiles_mut);
     }
 }
 
@@ -279,9 +276,9 @@ fn address_to_u64(address: Address) -> u64 {
     address.into_u256().try_into().unwrap()
 }
 
-fn fill_all_precompiles<'a>(ctx: &HlBlockExecutionCtx<'a>, precompiles_mut: &mut PrecompilesMap) {
+fn fill_all_precompiles(extras: &HlExtras, precompiles_mut: &mut PrecompilesMap) {
     let lowest_address = 0x800;
-    let highest_address = ctx.extras.highest_precompile_address.map_or(0x80D, address_to_u64);
+    let highest_address = extras.highest_precompile_address.map_or(0x80D, address_to_u64);
     for address in lowest_address..=highest_address {
         let address = Address::from(U160::from(address));
         precompiles_mut.apply_precompile(&address, |f| {
