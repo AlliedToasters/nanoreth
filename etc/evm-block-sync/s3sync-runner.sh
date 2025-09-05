@@ -9,6 +9,7 @@ DEST="${HOME}/evm-blocks-testnet"
 WORKERS=512
 S3SYNC="${HOME}/.local/bin/s3sync"
 START_AT=""   # default: run all
+CHUNK_SIZE=1000000  # each prefix represents this many blocks
 # ----------------
 
 # parse args
@@ -86,7 +87,6 @@ install_s3sync_latest() {
   log "s3sync installed at $S3SYNC"
 }
 
-
 # --- deps & install/update ---
 need aws
 install_s3sync_latest
@@ -101,18 +101,23 @@ mapfile -t PREFIXES < <(
 )
 ((${#PREFIXES[@]})) || die "No prefixes found."
 
-# mark initial status
-declare -A RESULTS
-if [[ ! -n "$START_AT" ]]; then
-  skipping=0
-else
-  skipping=1
+# sort numerically to make order predictable
+IFS=$'\n' read -r -d '' -a PREFIXES < <(printf '%s\n' "${PREFIXES[@]}" | sort -n && printf '\0')
+
+# compute the effective start prefix:
+# - if START_AT is set, floor it to the containing chunk boundary
+effective_start=""
+if [[ -n "$START_AT" ]]; then
+  # numeric, base-10 safe
+  start_num=$((10#$START_AT))
+  chunk=$((10#$CHUNK_SIZE))
+  effective_start=$(( (start_num / chunk) * chunk ))
 fi
+
+# mark initial status using numeric comparisons (no ordering assumptions)
+declare -A RESULTS
 for p in "${PREFIXES[@]}"; do
-  if [[ -n "$START_AT" && "$p" == "$START_AT" ]]; then
-    skipping=0
-  fi
-  if (( skipping )); then
+  if [[ -n "$effective_start" ]] && (( 10#$p < 10#$effective_start )); then
     RESULTS["$p"]="-- SKIPPED"
   else
     RESULTS["$p"]="-- TODO"
