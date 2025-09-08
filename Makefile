@@ -1,6 +1,8 @@
 # Modifed from reth Makefile
 .DEFAULT_GOAL := help
 
+GIT_SHA ?= $(shell git rev-parse HEAD)
+GIT_TAG ?= $(shell git describe --tags --abbrev=0 2>/dev/null)
 BIN_DIR = "dist/bin"
 
 # List of features to use when building. Can be overridden via the environment.
@@ -16,6 +18,9 @@ PROFILE ?= release
 
 # Extra flags for Cargo
 CARGO_INSTALL_EXTRA_FLAGS ?=
+
+# The docker image name
+DOCKER_IMAGE_NAME ?= ghcr.io/hl-archive-node/nanoreth
 
 ##@ Help
 
@@ -207,3 +212,50 @@ check-features:
 		--package reth-primitives-traits \
 		--package reth-primitives \
 		--feature-powerset
+
+##@ Docker
+
+# Note: This requires a buildx builder with emulation support. For example:
+#
+# `docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64`
+# `docker buildx create --use --driver docker-container --name cross-builder`
+.PHONY: docker-build-push
+docker-build-push: ## Build and push a cross-arch Docker image tagged with the latest git tag.
+	$(call docker_build_push,$(GIT_TAG),$(GIT_TAG))
+
+# Note: This requires a buildx builder with emulation support. For example:
+#
+# `docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64`
+# `docker buildx create --use --driver docker-container --name cross-builder`
+.PHONY: docker-build-push-git-sha
+docker-build-push-git-sha: ## Build and push a cross-arch Docker image tagged with the latest git sha.
+	$(call docker_build_push,$(GIT_SHA),$(GIT_SHA))
+
+# Note: This requires a buildx builder with emulation support. For example:
+#
+# `docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64`
+# `docker buildx create --use --driver docker-container --name cross-builder`
+.PHONY: docker-build-push-latest
+docker-build-push-latest: ## Build and push a cross-arch Docker image tagged with the latest git tag and `latest`.
+	$(call docker_build_push,$(GIT_TAG),latest)
+
+# Note: This requires a buildx builder with emulation support. For example:
+#
+# `docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64`
+# `docker buildx create --use --name cross-builder`
+.PHONY: docker-build-push-nightly
+docker-build-push-nightly: ## Build and push cross-arch Docker image tagged with the latest git tag with a `-nightly` suffix, and `latest-nightly`.
+	$(call docker_build_push,nightly,nightly)
+
+# Create a Docker image using the main Dockerfile
+define docker_build_push
+	docker buildx build --file ./Dockerfile . \
+		--platform linux/amd64 \
+		--tag $(DOCKER_IMAGE_NAME):$(1) \
+		--tag $(DOCKER_IMAGE_NAME):$(2) \
+		--build-arg BUILD_PROFILE="$(PROFILE)" \
+		--build-arg FEATURES="jemalloc,asm-keccak" \
+		--build-arg RUSTFLAGS="-C target-cpu=native" \
+		--provenance=false \
+		--push
+endef
