@@ -2,6 +2,7 @@
 name = "reth_hl"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [lib]
 name = "reth_hl"
@@ -166,3 +167,7 @@ client = [
 
 [dev-dependencies]
 tempfile = "3.20.0"
+
+[build-dependencies]
+vergen = { version = "9.0.4", features = ["build", "cargo", "emit_and_set"] }
+vergen-git2 = "1.0.5"

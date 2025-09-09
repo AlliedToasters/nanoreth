@@ -5,5 +5,6 @@ mod evm;
 mod hardforks;
 pub mod node;
 pub mod pseudo_peer;
+pub mod version;
 
 pub use node::primitives::{HlBlock, HlBlockBody, HlPrimitives};
