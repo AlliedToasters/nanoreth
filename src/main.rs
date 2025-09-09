@@ -31,6 +31,9 @@ fn main() -> eyre::Result<()> {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
+    // Initialize custom version metadata before parsing CLI so --version uses reth-hl values
+    reth_hl::version::init_reth_hl_version();
+
     Cli::<HlChainSpecParser, HlNodeArgs>::parse().run(
         |builder: WithLaunchContext<NodeBuilder<Arc<DatabaseEnv>, HlChainSpec>>,
          ext: HlNodeArgs| async move {
