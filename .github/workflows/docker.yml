@@ -6,6 +6,7 @@ on:
   push:
     tags:
       - v*
+      - nb-????????
 
 env:
   IMAGE_NAME: ${{ github.repository_owner }}/nanoreth
