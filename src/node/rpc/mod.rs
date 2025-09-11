@@ -31,7 +31,7 @@ use reth_rpc::RpcTypes;
 use reth_rpc_eth_api::{
     helpers::{
         pending_block::BuildPendingEnv, spec::SignersForApi, AddDevSigners, EthApiSpec, EthFees,
-        EthState, LoadFee, LoadState, SpawnBlocking, Trace,
+        EthState, LoadFee, LoadPendingBlock, LoadState, SpawnBlocking, Trace,
     },
     EthApiTypes, FromEvmError, RpcConvert, RpcConverter, RpcNodeCore, RpcNodeCoreExt,
     SignableTxRequest,
@@ -189,6 +189,7 @@ impl<N, Rpc> LoadState for HlEthApi<N, Rpc>
 where
     N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
+    Self: LoadPendingBlock,
 {
 }
 
@@ -196,6 +197,7 @@ impl<N, Rpc> EthState for HlEthApi<N, Rpc>
 where
     N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
+    Self: LoadPendingBlock,
 {
     #[inline]
     fn max_proof_window(&self) -> u64 {
