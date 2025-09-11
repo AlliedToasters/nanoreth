@@ -3,6 +3,8 @@
 HyperEVM archive node implementation based on [reth](https://github.com/paradigmxyz/reth).
 NodeBuilder API version is heavily inspired by [reth-bsc](https://github.com/loocapro/reth-bsc).
 
+Got questions? Drop by the [Hyperliquid Discord](https://discord.gg/hyperliquid) #node-operators channel.
+
 ## ⚠️ IMPORTANT: System Transactions Appear as Pseudo Transactions
 
 Deposit transactions from [System Addresses](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/hypercore-less-than-greater-than-hyperevm-transfers#system-addresses) like `0x222..22` / `0x200..xx` to user addresses are intentionally recorded as pseudo transactions.
