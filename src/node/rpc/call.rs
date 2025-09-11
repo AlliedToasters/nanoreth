@@ -3,7 +3,7 @@ use crate::{node::evm::apply_precompiles, HlBlock};
 use alloy_evm::Evm;
 use alloy_primitives::B256;
 use reth::rpc::server_types::eth::EthApiError;
-use reth_evm::{ConfigureEvm, Database, EvmEnvFor, TxEnvFor};
+use reth_evm::{ConfigureEvm, Database, EvmEnvFor, SpecFor, TxEnvFor};
 use reth_primitives::{NodePrimitives, Recovered};
 use reth_primitives_traits::SignedTransaction;
 use reth_provider::{ProviderError, ProviderTx};
@@ -19,7 +19,12 @@ impl<N, Rpc> EthCall for HlEthApi<N, Rpc>
 where
     N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
-    Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError, TxEnv = TxEnvFor<N::Evm>>,
+    Rpc: RpcConvert<
+        Primitives = N::Primitives,
+        Error = EthApiError,
+        TxEnv = TxEnvFor<N::Evm>,
+        Spec = SpecFor<N::Evm>,
+    >,
 {
 }
 
@@ -27,7 +32,12 @@ impl<N, Rpc> EstimateCall for HlEthApi<N, Rpc>
 where
     N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
-    Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError, TxEnv = TxEnvFor<N::Evm>>,
+    Rpc: RpcConvert<
+        Primitives = N::Primitives,
+        Error = EthApiError,
+        TxEnv = TxEnvFor<N::Evm>,
+        Spec = SpecFor<N::Evm>,
+    >,
 {
 }
 
@@ -35,7 +45,12 @@ impl<N, Rpc> Call for HlEthApi<N, Rpc>
 where
     N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm>,
-    Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError, TxEnv = TxEnvFor<N::Evm>>,
+    Rpc: RpcConvert<
+        Primitives = N::Primitives,
+        Error = EthApiError,
+        TxEnv = TxEnvFor<N::Evm>,
+        Spec = SpecFor<N::Evm>,
+    >,
 {
     #[inline]
     fn call_gas_limit(&self) -> u64 {
