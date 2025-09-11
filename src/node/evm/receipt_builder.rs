@@ -1,5 +1,6 @@
 use crate::node::primitives::TransactionSigned;
 use alloy_evm::eth::receipt_builder::{ReceiptBuilder, ReceiptBuilderCtx};
+use reth_codecs::alloy::transaction::Envelope;
 use reth_evm::Evm;
 use reth_primitives::Receipt;
 

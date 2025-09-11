@@ -1,20 +1,22 @@
 //! HlNodePrimitives::TransactionSigned; it's the same as ethereum transaction type,
 //! except that it supports pseudo signer for system transactions.
+use crate::evm::transaction::HlTxEnv;
 use alloy_consensus::{
-    crypto::RecoveryError, error::ValueError, EthereumTxEnvelope, EthereumTypedTransaction,
-    SignableTransaction, Signed, Transaction as TransactionTrait, TransactionEnvelope, TxEip1559,
-    TxEip2930, TxEip4844, TxEip4844WithSidecar, TxEip7702, TxLegacy, TxType, TypedTransaction,
+    crypto::RecoveryError, error::ValueError, SignableTransaction, Signed,
+    Transaction as TransactionTrait, TransactionEnvelope, TxEip1559, TxEip2930, TxEip4844,
+    TxEip7702, TxLegacy, TxType, TypedTransaction,
 };
-use alloy_eips::{eip7594::BlobTransactionSidecarVariant, Encodable2718};
+use alloy_eips::Encodable2718;
 use alloy_network::TxSigner;
 use alloy_primitives::{address, Address, TxHash, U256};
 use alloy_rpc_types::{Transaction, TransactionInfo, TransactionRequest};
 use alloy_signer::Signature;
-use reth_codecs::alloy::transaction::FromTxCompact;
+use reth_codecs::alloy::transaction::{Envelope, FromTxCompact};
 use reth_db::{
     table::{Compress, Decompress},
     DatabaseError,
 };
+use reth_ethereum_primitives::PooledTransactionVariant;
 use reth_evm::FromRecoveredTx;
 use reth_primitives::Recovered;
 use reth_primitives_traits::{
@@ -25,8 +27,6 @@ use reth_rpc_eth_api::{
     EthTxEnvError, SignTxRequestError, SignableTxRequest, TryIntoSimTx,
 };
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
-
-use crate::evm::transaction::HlTxEnv;
 
 type InnerType = alloy_consensus::EthereumTxEnvelope<TxEip4844>;
 
@@ -157,16 +157,8 @@ impl TransactionSigned {
         }
     }
 
-    pub fn signature(&self) -> &Signature {
-        self.inner().signature()
-    }
-
-    pub const fn tx_type(&self) -> TxType {
-        self.inner().tx_type()
-    }
-
     pub fn is_system_transaction(&self) -> bool {
-        self.gas_price().is_some() && self.gas_price().unwrap() == 0
+        matches!(self.gas_price(), Some(0))
     }
 }
 
@@ -187,24 +179,16 @@ impl SerdeBincodeCompat for TransactionSigned {
 
 pub type BlockBody = alloy_consensus::BlockBody<TransactionSigned>;
 
-impl TryFrom<TransactionSigned>
-    for EthereumTxEnvelope<TxEip4844WithSidecar<BlobTransactionSidecarVariant>>
-{
-    type Error = <InnerType as TryInto<
-        EthereumTxEnvelope<TxEip4844WithSidecar<BlobTransactionSidecarVariant>>,
-    >>::Error;
+impl TryFrom<TransactionSigned> for PooledTransactionVariant {
+    type Error = <InnerType as TryInto<PooledTransactionVariant>>::Error;
 
     fn try_from(value: TransactionSigned) -> Result<Self, Self::Error> {
         value.into_inner().try_into()
     }
 }
 
-impl From<EthereumTxEnvelope<TxEip4844WithSidecar<BlobTransactionSidecarVariant>>>
-    for TransactionSigned
-{
-    fn from(
-        value: EthereumTxEnvelope<TxEip4844WithSidecar<BlobTransactionSidecarVariant>>,
-    ) -> Self {
+impl From<PooledTransactionVariant> for TransactionSigned {
+    fn from(value: PooledTransactionVariant) -> Self {
         Self::Default(value.into())
     }
 }
@@ -277,26 +261,7 @@ impl SignableTxRequest<TransactionSigned> for TransactionRequest {
         self,
         signer: impl TxSigner<Signature> + Send,
     ) -> Result<TransactionSigned, SignTxRequestError> {
-        let mut tx =
-            self.build_typed_tx().map_err(|_| SignTxRequestError::InvalidTransactionRequest)?;
-        let signature = signer.sign_transaction(&mut tx).await?;
-        let signed = match tx {
-            EthereumTypedTransaction::Legacy(tx) => {
-                EthereumTxEnvelope::Legacy(tx.into_signed(signature))
-            }
-            EthereumTypedTransaction::Eip2930(tx) => {
-                EthereumTxEnvelope::Eip2930(tx.into_signed(signature))
-            }
-            EthereumTypedTransaction::Eip1559(tx) => {
-                EthereumTxEnvelope::Eip1559(tx.into_signed(signature))
-            }
-            EthereumTypedTransaction::Eip4844(tx) => {
-                EthereumTxEnvelope::Eip4844(TxEip4844::from(tx).into_signed(signature))
-            }
-            EthereumTypedTransaction::Eip7702(tx) => {
-                EthereumTxEnvelope::Eip7702(tx.into_signed(signature))
-            }
-        };
+        let signed = SignableTxRequest::<InnerType>::try_build_and_sign(self, signer).await?;
         Ok(TransactionSigned::Default(signed))
     }
 }
