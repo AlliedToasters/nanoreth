@@ -14,6 +14,7 @@ use self::{
 use super::{BlockSource, BlockSourceBoxed};
 use crate::node::types::BlockAndReceipts;
 use futures::future::BoxFuture;
+use reth_metrics::{metrics, metrics::Counter, Metrics};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -41,6 +42,16 @@ pub struct HlNodeBlockSource {
     pub local_blocks_cache: Arc<Mutex<LocalBlocksCache>>,
     pub last_local_fetch: Arc<Mutex<Option<(u64, OffsetDateTime)>>>,
     pub args: HlNodeBlockSourceArgs,
+    pub metrics: HlNodeBlockSourceMetrics,
+}
+
+#[derive(Metrics, Clone)]
+#[metrics(scope = "block_source.hl_node")]
+pub struct HlNodeBlockSourceMetrics {
+    /// How many times the HL node block source is polling for a block
+    pub fetched_from_hl_node: Counter,
+    /// How many times the HL node block source is fetched from the fallback
+    pub fetched_from_fallback: Counter,
 }
 
 impl BlockSource for HlNodeBlockSource {
@@ -49,11 +60,13 @@ impl BlockSource for HlNodeBlockSource {
         let args = self.args.clone();
         let local_blocks_cache = self.local_blocks_cache.clone();
         let last_local_fetch = self.last_local_fetch.clone();
+        let metrics = self.metrics.clone();
         Box::pin(async move {
             let now = OffsetDateTime::now_utc();
 
             if let Some(block) = Self::try_collect_local_block(local_blocks_cache, height).await {
                 Self::update_last_fetch(last_local_fetch, height, now).await;
+                metrics.fetched_from_hl_node.increment(1);
                 return Ok(block);
             }
 
@@ -68,6 +81,7 @@ impl BlockSource for HlNodeBlockSource {
             }
 
             let block = fallback.collect_block(height).await?;
+            metrics.fetched_from_fallback.increment(1);
             Self::update_last_fetch(last_local_fetch, height, now).await;
             Ok(block)
         })
@@ -224,6 +238,7 @@ impl HlNodeBlockSource {
             args,
             local_blocks_cache: Arc::new(Mutex::new(LocalBlocksCache::new(CACHE_SIZE))),
             last_local_fetch: Arc::new(Mutex::new(None)),
+            metrics: HlNodeBlockSourceMetrics::default(),
         };
         block_source.run(next_block_number).await.unwrap();
         block_source

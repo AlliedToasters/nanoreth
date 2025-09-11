@@ -2,6 +2,7 @@ use super::{utils, BlockSource};
 use crate::node::types::BlockAndReceipts;
 use eyre::Context;
 use futures::{future::BoxFuture, FutureExt};
+use reth_metrics::{metrics, metrics::Counter, Metrics};
 use std::path::PathBuf;
 use tracing::info;
 
@@ -9,11 +10,21 @@ use tracing::info;
 #[derive(Debug, Clone)]
 pub struct LocalBlockSource {
     dir: PathBuf,
+    metrics: LocalBlockSourceMetrics,
+}
+
+#[derive(Metrics, Clone)]
+#[metrics(scope = "block_source.local")]
+pub struct LocalBlockSourceMetrics {
+    /// How many times the local block source is polling for a block
+    pub polling_attempt: Counter,
+    /// How many times the local block source is fetched from the local filesystem
+    pub fetched: Counter,
 }
 
 impl LocalBlockSource {
     pub fn new(dir: impl Into<PathBuf>) -> Self {
-        Self { dir: dir.into() }
+        Self { dir: dir.into(), metrics: LocalBlockSourceMetrics::default() }
     }
 
     async fn pick_path_with_highest_number(dir: PathBuf, is_dir: bool) -> Option<(u64, String)> {
@@ -31,13 +42,17 @@ impl LocalBlockSource {
 impl BlockSource for LocalBlockSource {
     fn collect_block(&self, height: u64) -> BoxFuture<'static, eyre::Result<BlockAndReceipts>> {
         let dir = self.dir.clone();
+        let metrics = self.metrics.clone();
         async move {
             let path = dir.join(utils::rmp_path(height));
+            metrics.polling_attempt.increment(1);
+
             let file = tokio::fs::read(&path)
                 .await
                 .wrap_err_with(|| format!("Failed to read block from {path:?}"))?;
             let mut decoder = lz4_flex::frame::FrameDecoder::new(&file[..]);
             let blocks: Vec<BlockAndReceipts> = rmp_serde::from_read(&mut decoder)?;
+            metrics.fetched.increment(1);
             Ok(blocks[0].clone())
         }
         .boxed()

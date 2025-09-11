@@ -2,6 +2,7 @@ use super::{utils, BlockSource};
 use crate::node::types::BlockAndReceipts;
 use aws_sdk_s3::types::RequestPayer;
 use futures::{future::BoxFuture, FutureExt};
+use reth_metrics::{metrics, metrics::Counter, Metrics};
 use std::{sync::Arc, time::Duration};
 use tracing::info;
 
@@ -11,11 +12,26 @@ pub struct S3BlockSource {
     client: Arc<aws_sdk_s3::Client>,
     bucket: String,
     polling_interval: Duration,
+    metrics: S3BlockSourceMetrics,
+}
+
+#[derive(Metrics, Clone)]
+#[metrics(scope = "block_source.s3")]
+pub struct S3BlockSourceMetrics {
+    /// How many times the S3 block source is polling for a block
+    pub polling_attempt: Counter,
+    /// How many times the S3 block source has polled a block
+    pub fetched: Counter,
 }
 
 impl S3BlockSource {
     pub fn new(client: aws_sdk_s3::Client, bucket: String, polling_interval: Duration) -> Self {
-        Self { client: client.into(), bucket, polling_interval }
+        Self {
+            client: client.into(),
+            bucket,
+            polling_interval,
+            metrics: S3BlockSourceMetrics::default(),
+        }
     }
 
     async fn pick_path_with_highest_number(
@@ -52,14 +68,18 @@ impl BlockSource for S3BlockSource {
     fn collect_block(&self, height: u64) -> BoxFuture<'static, eyre::Result<BlockAndReceipts>> {
         let client = self.client.clone();
         let bucket = self.bucket.clone();
+        let metrics = self.metrics.clone();
         async move {
             let path = utils::rmp_path(height);
+            metrics.polling_attempt.increment(1);
+
             let request = client
                 .get_object()
                 .request_payer(RequestPayer::Requester)
                 .bucket(&bucket)
                 .key(path);
             let response = request.send().await?;
+            metrics.fetched.increment(1);
             let bytes = response.body.collect().await?.into_bytes();
             let mut decoder = lz4_flex::frame::FrameDecoder::new(&bytes[..]);
             let blocks: Vec<BlockAndReceipts> = rmp_serde::from_read(&mut decoder)?;

@@ -63,6 +63,7 @@ reth-trie-db = { git = "https://github.com/sprites0/reth", rev = "a690ef25b56039
 reth-codecs = { git = "https://github.com/sprites0/reth", rev = "a690ef25b56039195e7e4a4abd01c78aedcc73fb" }
 reth-transaction-pool = { git = "https://github.com/sprites0/reth", rev = "a690ef25b56039195e7e4a4abd01c78aedcc73fb" }
 reth-stages-types = { git = "https://github.com/sprites0/reth", rev = "a690ef25b56039195e7e4a4abd01c78aedcc73fb" }
+reth-metrics = { git = "https://github.com/sprites0/reth", rev = "a690ef25b56039195e7e4a4abd01c78aedcc73fb" }
 revm = { version = "28.0.1", default-features = false }
 
 # alloy dependencies
