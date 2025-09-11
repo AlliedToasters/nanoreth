@@ -3,6 +3,8 @@
 HyperEVM archive node implementation based on [reth](https://github.com/paradigmxyz/reth).
 NodeBuilder API version is heavily inspired by [reth-bsc](https://github.com/loocapro/reth-bsc).
 
+Got questions? Drop by the [Hyperliquid Discord](https://discord.gg/hyperliquid) #node-operators channel.
+
 ## ⚠️ IMPORTANT: System Transactions Appear as Pseudo Transactions
 
 Deposit transactions from [System Addresses](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/hypercore-less-than-greater-than-hyperevm-transfers#system-addresses) like `0x222..22` / `0x200..xx` to user addresses are intentionally recorded as pseudo transactions.
@@ -58,19 +60,19 @@ $ reth-hl node --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 \
 
 ## How to run (testnet)
 
-Testnet is supported since block 21304281.
+Testnet is supported since block 30281484.
 
 ```sh
-# Get testnet genesis at block 21304281
+# Get testnet genesis at block 30281484
 $ cd ~
 $ git clone https://github.com/sprites0/hl-testnet-genesis
 $ zstd --rm -d ~/hl-testnet-genesis/*.zst
 
 # Init node
 $ make install
-$ reth-hl init-state --without-evm --chain testnet --header ~/hl-testnet-genesis/21304281.rlp \
-  --header-hash 0x5b10856d2b1ad241c9bd6136bcc60ef7e8553560ca53995a590db65f809269b4 \
-  ~/hl-testnet-genesis/21304281.jsonl --total-difficulty 0 
+$ reth-hl init-state --without-evm --chain testnet --header ~/hl-testnet-genesis/30281484.rlp \
+  --header-hash 0x147cc3c09e9ddbb11799c826758db284f77099478ab5f528d3a57a6105516c21 \
+  ~/hl-testnet-genesis/30281484.jsonl --total-difficulty 0 
 
 # Run node
 $ reth-hl node --chain testnet --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 \
