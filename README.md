@@ -2,6 +2,8 @@
 
 Hyperliquid archive node based on [reth](https://github.com/paradigmxyz/reth).
 
+Got questions? Drop by the Hyperliquid Discord #node-operators channel.
+
 ## ⚠️ IMPORTANT: System Transactions Appear as Pseudo Transactions
 
 Deposit transactions from `0x222..22` to user addresses are intentionally recorded as pseudo transactions.
