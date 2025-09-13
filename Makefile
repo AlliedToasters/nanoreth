@@ -255,7 +255,6 @@ define docker_build_push
 		--tag $(DOCKER_IMAGE_NAME):$(2) \
 		--build-arg BUILD_PROFILE="$(PROFILE)" \
 		--build-arg FEATURES="jemalloc,asm-keccak" \
-		--build-arg RUSTFLAGS="-C target-cpu=native" \
 		--provenance=false \
 		--push
 endef
