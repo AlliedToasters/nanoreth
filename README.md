@@ -2,7 +2,7 @@
 
 Hyperliquid archive node based on [reth](https://github.com/paradigmxyz/reth).
 
-Got questions? Drop by the Hyperliquid Discord #node-operators channel.
+Got questions? Drop by the [Hyperliquid Discord](https://discord.gg/hyperliquid) #node-operators channel.
 
 ## ⚠️ IMPORTANT: System Transactions Appear as Pseudo Transactions
 
