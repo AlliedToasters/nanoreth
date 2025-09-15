@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 
 use crate::chainspec::{MAINNET_CHAIN_ID, TESTNET_CHAIN_ID};
 
+mod patch;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EvmContract {
     address: Address,
@@ -58,5 +60,10 @@ pub(crate) fn erc20_contract_to_spot_token(chain_id: u64) -> Result<BTreeMap<Add
             map.insert(evm_contract.address, SpotId { index: token.index });
         }
     }
+
+    if chain_id == TESTNET_CHAIN_ID {
+        patch::patch_testnet_spot_meta(&mut map);
+    }
+
     Ok(map)
 }
