@@ -42,6 +42,7 @@ use std::{fmt, marker::PhantomData, sync::Arc};
 mod block;
 mod call;
 pub mod engine_api;
+mod estimate;
 mod transaction;
 
 pub trait HlRpcNodeCore: RpcNodeCore<Primitives: NodePrimitives<Block = HlBlock>> {}

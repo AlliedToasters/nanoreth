@@ -63,6 +63,11 @@ reth-trie-db = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d6
 reth-codecs = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
 reth-transaction-pool = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
 reth-stages-types = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
+reth-storage-api = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
+reth-errors = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
+reth-rpc-convert = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
+reth-rpc-eth-types = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
+reth-rpc-server-types = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
 reth-metrics = { git = "https://github.com/sprites0/reth", rev = "d26fd2e25b57d695aa453c93f15a8cd158a1f505" }
 revm = { version = "29.0.0", default-features = false }
 
