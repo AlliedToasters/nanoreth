@@ -43,6 +43,7 @@ mod block;
 mod call;
 pub mod engine_api;
 mod estimate;
+pub mod precompile;
 mod transaction;
 
 pub trait HlRpcNodeCore: RpcNodeCore<Primitives: NodePrimitives<Block = HlBlock>> {}

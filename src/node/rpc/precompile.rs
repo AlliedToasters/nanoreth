@@ -1,0 +1,44 @@
+use jsonrpsee::proc_macros::rpc;
+use jsonrpsee_core::{async_trait, RpcResult};
+use reth_rpc_convert::RpcConvert;
+use reth_rpc_eth_types::EthApiError;
+use tracing::trace;
+
+use crate::node::{
+    rpc::{HlEthApi, HlRpcNodeCore},
+    types::HlExtras,
+};
+
+/// A custom RPC trait for fetching block precompile data.
+#[rpc(server, namespace = "eth")]
+#[async_trait]
+pub trait HlBlockPrecompileApi {
+    /// Fetches precompile data for a given block number.
+    #[method(name = "blockPrecompileData")]
+    async fn block_precompile_data(&self, block_number: u64) -> RpcResult<HlExtras>;
+}
+
+pub struct HlBlockPrecompileExt<N: HlRpcNodeCore, Rpc: RpcConvert> {
+    eth_api: HlEthApi<N, Rpc>,
+}
+
+impl<N: HlRpcNodeCore, Rpc: RpcConvert> HlBlockPrecompileExt<N, Rpc> {
+    /// Creates a new instance of the [`HlBlockPrecompileExt`].
+    pub fn new(eth_api: HlEthApi<N, Rpc>) -> Self {
+        Self { eth_api }
+    }
+}
+
+#[async_trait]
+impl<N, Rpc> HlBlockPrecompileApiServer for HlBlockPrecompileExt<N, Rpc>
+where
+    N: HlRpcNodeCore,
+    Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
+{
+    async fn block_precompile_data(&self, block_number: u64) -> RpcResult<HlExtras> {
+        trace!(target: "rpc::eth", block_number, "Serving eth_blockPrecompileData");
+        let hl_extras =
+            self.eth_api.get_hl_extras(block_number).map_err(|e| EthApiError::from(e))?;
+        Ok(hl_extras)
+    }
+}
