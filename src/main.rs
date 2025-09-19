@@ -12,6 +12,7 @@ use reth_hl::{
     chainspec::{parser::HlChainSpecParser, HlChainSpec},
     node::{
         cli::{Cli, HlNodeArgs},
+        rpc::precompile::{HlBlockPrecompileApiServer, HlBlockPrecompileExt},
         storage::tables::Tables,
         HlNode,
     },
@@ -71,6 +72,10 @@ fn main() -> eyre::Result<()> {
                         ctx.modules.remove_method_from_configured("eth_getProof");
                         info!("eth_getProof is disabled by default");
                     }
+
+                    ctx.modules.merge_configured(
+                        HlBlockPrecompileExt::new(ctx.registry.eth_api().clone()).into_rpc(),
+                    )?;
 
                     Ok(())
                 })

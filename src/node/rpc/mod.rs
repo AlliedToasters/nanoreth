@@ -3,6 +3,7 @@ use crate::{
     node::{evm::apply_precompiles, types::HlExtras},
     HlBlock, HlPrimitives,
 };
+use alloy_eips::BlockId;
 use alloy_evm::Evm;
 use alloy_network::Ethereum;
 use alloy_primitives::U256;
@@ -26,7 +27,9 @@ use reth::{
 };
 use reth_evm::{ConfigureEvm, Database, EvmEnvFor, HaltReasonFor, InspectorFor, TxEnvFor};
 use reth_primitives::NodePrimitives;
-use reth_provider::{BlockReader, ChainSpecProvider, ProviderError, ProviderHeader, ProviderTx};
+use reth_provider::{
+    BlockReaderIdExt, ChainSpecProvider, ProviderError, ProviderHeader, ProviderTx,
+};
 use reth_rpc::RpcTypes;
 use reth_rpc_eth_api::{
     helpers::{
@@ -43,6 +46,7 @@ mod block;
 mod call;
 pub mod engine_api;
 mod estimate;
+pub mod precompile;
 mod transaction;
 
 pub trait HlRpcNodeCore: RpcNodeCore<Primitives: NodePrimitives<Block = HlBlock>> {}
@@ -232,7 +236,7 @@ where
         I: InspectorFor<Self::Evm, DB>,
     {
         let block_number = evm_env.block_env().number;
-        let hl_extras = self.get_hl_extras(block_number.try_into().unwrap())?;
+        let hl_extras = self.get_hl_extras(block_number.to::<u64>().into())?;
 
         let mut evm = self.evm_config().evm_with_env_and_inspector(db, evm_env, inspector);
         apply_precompiles(&mut evm, &hl_extras);
@@ -245,10 +249,10 @@ where
     N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
-    fn get_hl_extras(&self, block_number: u64) -> Result<HlExtras, ProviderError> {
+    fn get_hl_extras(&self, block: BlockId) -> Result<HlExtras, ProviderError> {
         Ok(self
             .provider()
-            .block_by_number(block_number)?
+            .block_by_id(block)?
             .map(|block| HlExtras {
                 read_precompile_calls: block.body.read_precompile_calls.clone(),
                 highest_precompile_address: block.body.highest_precompile_address,
