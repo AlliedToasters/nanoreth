@@ -1,4 +1,4 @@
-use alloy_eips::BlockHashOrNumber;
+use alloy_eips::BlockId;
 use jsonrpsee::proc_macros::rpc;
 use jsonrpsee_core::{async_trait, RpcResult};
 use reth_rpc_convert::RpcConvert;
@@ -16,7 +16,7 @@ use crate::node::{
 pub trait HlBlockPrecompileApi {
     /// Fetches precompile data for a given block.
     #[method(name = "blockPrecompileData")]
-    async fn block_precompile_data(&self, block: BlockHashOrNumber) -> RpcResult<HlExtras>;
+    async fn block_precompile_data(&self, block: BlockId) -> RpcResult<HlExtras>;
 }
 
 pub struct HlBlockPrecompileExt<N: HlRpcNodeCore, Rpc: RpcConvert> {
@@ -36,7 +36,7 @@ where
     N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
-    async fn block_precompile_data(&self, block: BlockHashOrNumber) -> RpcResult<HlExtras> {
+    async fn block_precompile_data(&self, block: BlockId) -> RpcResult<HlExtras> {
         trace!(target: "rpc::eth", ?block, "Serving eth_blockPrecompileData");
         let hl_extras = self.eth_api.get_hl_extras(block).map_err(|e| EthApiError::from(e))?;
         Ok(hl_extras)
