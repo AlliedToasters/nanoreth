@@ -38,7 +38,7 @@ where
 {
     async fn block_precompile_data(&self, block: BlockId) -> RpcResult<HlExtras> {
         trace!(target: "rpc::eth", ?block, "Serving eth_blockPrecompileData");
-        let hl_extras = self.eth_api.get_hl_extras(block).map_err(|e| EthApiError::from(e))?;
+        let hl_extras = self.eth_api.get_hl_extras(block).map_err(EthApiError::from)?;
         Ok(hl_extras)
     }
 }
