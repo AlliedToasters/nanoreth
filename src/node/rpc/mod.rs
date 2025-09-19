@@ -3,6 +3,7 @@ use crate::{
     node::{evm::apply_precompiles, types::HlExtras},
     HlBlock, HlPrimitives,
 };
+use alloy_eips::BlockHashOrNumber;
 use alloy_evm::Evm;
 use alloy_network::Ethereum;
 use alloy_primitives::U256;
@@ -233,7 +234,7 @@ where
         I: InspectorFor<Self::Evm, DB>,
     {
         let block_number = evm_env.block_env().number;
-        let hl_extras = self.get_hl_extras(block_number.try_into().unwrap())?;
+        let hl_extras = self.get_hl_extras(block_number.to::<u64>().into())?;
 
         let mut evm = self.evm_config().evm_with_env_and_inspector(db, evm_env, inspector);
         apply_precompiles(&mut evm, &hl_extras);
@@ -246,10 +247,10 @@ where
     N: HlRpcNodeCore,
     Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
 {
-    fn get_hl_extras(&self, block_number: u64) -> Result<HlExtras, ProviderError> {
+    fn get_hl_extras(&self, block: BlockHashOrNumber) -> Result<HlExtras, ProviderError> {
         Ok(self
             .provider()
-            .block_by_number(block_number)?
+            .block(block)?
             .map(|block| HlExtras {
                 read_precompile_calls: block.body.read_precompile_calls.clone(),
                 highest_precompile_address: block.body.highest_precompile_address,

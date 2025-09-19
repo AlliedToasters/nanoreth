@@ -61,7 +61,7 @@ where
         DB: Database<Error = ProviderError> + fmt::Debug,
     {
         let block_number = evm_env.block_env().number;
-        let hl_extras = self.get_hl_extras(block_number.try_into().unwrap())?;
+        let hl_extras = self.get_hl_extras(block_number.to::<u64>().into())?;
 
         let mut evm = self.evm_config().evm_with_env(db, evm_env);
         apply_precompiles(&mut evm, &hl_extras);
@@ -82,7 +82,7 @@ where
         I: InspectorFor<Self::Evm, DB>,
     {
         let block_number = evm_env.block_env().number;
-        let hl_extras = self.get_hl_extras(block_number.try_into().unwrap())?;
+        let hl_extras = self.get_hl_extras(block_number.to::<u64>().into())?;
 
         let mut evm = self.evm_config().evm_with_env_and_inspector(db, evm_env, inspector);
         apply_precompiles(&mut evm, &hl_extras);
@@ -103,7 +103,7 @@ where
         I: IntoIterator<Item = Recovered<&'a ProviderTx<Self::Provider>>>,
     {
         let block_number = evm_env.block_env().number;
-        let hl_extras = self.get_hl_extras(block_number.try_into().unwrap())?;
+        let hl_extras = self.get_hl_extras(block_number.to::<u64>().into())?;
 
         let mut evm = self.evm_config().evm_with_env(db, evm_env);
         apply_precompiles(&mut evm, &hl_extras);

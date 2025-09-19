@@ -98,7 +98,7 @@ where
         tx_env.set_gas_limit(tx_env.gas_limit().min(highest_gas_limit));
 
         let block_number = evm_env.block_env().number;
-        let hl_extras = self.get_hl_extras(block_number.try_into().unwrap())?;
+        let hl_extras = self.get_hl_extras(block_number.to::<u64>().into())?;
 
         let mut evm = self.evm_config().evm_with_env(&mut db, evm_env);
         apply_precompiles(&mut evm, &hl_extras);
