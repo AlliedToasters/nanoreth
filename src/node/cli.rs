@@ -35,6 +35,12 @@ pub struct HlNodeArgs {
     #[command(flatten)]
     pub block_source_args: BlockSourceArgs,
 
+    /// Debug cutoff height.
+    ///
+    /// This option is used to cut off the block import at a specific height.
+    #[arg(long, env = "DEBUG_CUTOFF_HEIGHT")]
+    pub debug_cutoff_height: Option<u64>,
+
     /// Upstream RPC URL to forward incoming transactions.
     ///
     /// Default to Hyperliquid's RPC URL when not provided (https://rpc.hyperliquid.xyz/evm).

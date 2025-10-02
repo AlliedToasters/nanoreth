@@ -37,6 +37,7 @@ pub async fn start_pseudo_peer(
     chain_spec: Arc<HlChainSpec>,
     destination_peer: String,
     block_source: BlockSourceBoxed,
+    debug_cutoff_height: Option<u64>,
 ) -> eyre::Result<()> {
     let blockhash_cache = new_blockhash_cache();
 
@@ -46,6 +47,7 @@ pub async fn start_pseudo_peer(
         destination_peer,
         block_source.clone(),
         blockhash_cache.clone(),
+        debug_cutoff_height,
     )
     .await?;
 

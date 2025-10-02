@@ -49,14 +49,23 @@ pub type HlNodeAddOns<N> =
 pub struct HlNode {
     engine_handle_rx: Arc<Mutex<Option<oneshot::Receiver<ConsensusEngineHandle<HlPayloadTypes>>>>>,
     block_source_config: BlockSourceConfig,
+    debug_cutoff_height: Option<u64>,
 }
 
 impl HlNode {
     pub fn new(
         block_source_config: BlockSourceConfig,
+        debug_cutoff_height: Option<u64>,
     ) -> (Self, oneshot::Sender<ConsensusEngineHandle<HlPayloadTypes>>) {
         let (tx, rx) = oneshot::channel();
-        (Self { engine_handle_rx: Arc::new(Mutex::new(Some(rx))), block_source_config }, tx)
+        (
+            Self {
+                engine_handle_rx: Arc::new(Mutex::new(Some(rx))),
+                block_source_config,
+                debug_cutoff_height,
+            },
+            tx,
+        )
     }
 }
 
@@ -84,6 +93,7 @@ impl HlNode {
             .network(HlNetworkBuilder {
                 engine_handle_rx: self.engine_handle_rx.clone(),
                 block_source_config: self.block_source_config.clone(),
+                debug_cutoff_height: self.debug_cutoff_height,
             })
             .consensus(HlConsensusBuilder::default())
     }
