@@ -52,12 +52,12 @@ impl BlockPoller {
         chain_id: u64,
         block_source: BS,
         blockhash_cache: BlockHashCache,
+        debug_cutoff_height: Option<u64>,
     ) -> (Self, mpsc::Sender<()>) {
         let block_source = Arc::new(block_source);
         let (start_tx, start_rx) = mpsc::channel(1);
         let (block_tx, block_rx) = mpsc::channel(100);
-        let block_tx_clone = block_tx.clone();
-        let task = tokio::spawn(Self::task(start_rx, block_source, block_tx_clone));
+        let task = tokio::spawn(Self::task(start_rx, block_source, block_tx, debug_cutoff_height));
         (Self { chain_id, block_rx, task, blockhash_cache: blockhash_cache.clone() }, start_tx)
     }
 
@@ -69,7 +69,8 @@ impl BlockPoller {
     async fn task<BS: BlockSource>(
         mut start_rx: mpsc::Receiver<()>,
         block_source: Arc<BS>,
-        block_tx_clone: mpsc::Sender<(u64, BlockAndReceipts)>,
+        block_tx: mpsc::Sender<(u64, BlockAndReceipts)>,
+        debug_cutoff_height: Option<u64>,
     ) -> eyre::Result<()> {
         start_rx.recv().await.ok_or(eyre::eyre!("Failed to receive start signal"))?;
         info!("Starting block poller");
@@ -80,10 +81,16 @@ impl BlockPoller {
             .await
             .ok_or(eyre::eyre!("Failed to find latest block number"))?;
 
+        if let Some(debug_cutoff_height) = debug_cutoff_height {
+            if next_block_number > debug_cutoff_height {
+                next_block_number = debug_cutoff_height;
+            }
+        }
+
         loop {
             match block_source.collect_block(next_block_number).await {
                 Ok(block) => {
-                    block_tx_clone.send((next_block_number, block)).await?;
+                    block_tx.send((next_block_number, block)).await?;
                     next_block_number += 1;
                 }
                 Err(_) => tokio::time::sleep(polling_interval).await,

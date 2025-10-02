@@ -142,6 +142,8 @@ pub struct HlNetworkBuilder {
         Arc<Mutex<Option<oneshot::Receiver<ConsensusEngineHandle<HlPayloadTypes>>>>>,
 
     pub(crate) block_source_config: BlockSourceConfig,
+
+    pub(crate) debug_cutoff_height: Option<u64>,
 }
 
 impl HlNetworkBuilder {
@@ -203,6 +205,7 @@ where
         pool: Pool,
     ) -> eyre::Result<Self::Network> {
         let block_source_config = self.block_source_config.clone();
+        let debug_cutoff_height = self.debug_cutoff_height;
         let handle =
             ctx.start_network(NetworkManager::builder(self.network_config(ctx)?).await?, pool);
         let local_node_record = handle.local_node_record();
@@ -223,6 +226,7 @@ where
                 block_source_config
                     .create_cached_block_source((*chain_spec).clone(), next_block_number)
                     .await,
+                debug_cutoff_height,
             )
             .await
             .unwrap();

@@ -20,6 +20,7 @@ pub struct NetworkBuilder {
     discovery_port: u16,
     listener_port: u16,
     chain_spec: HlChainSpec,
+    debug_cutoff_height: Option<u64>,
 }
 
 impl Default for NetworkBuilder {
@@ -31,6 +32,7 @@ impl Default for NetworkBuilder {
             discovery_port: 0,
             listener_port: 0,
             chain_spec: HlChainSpec::default(),
+            debug_cutoff_height: None,
         }
     }
 }
@@ -46,6 +48,11 @@ impl NetworkBuilder {
         self
     }
 
+    pub fn with_debug_cutoff_height(mut self, debug_cutoff_height: Option<u64>) -> Self {
+        self.debug_cutoff_height = debug_cutoff_height;
+        self
+    }
+
     pub async fn build<BS>(
         self,
         block_source: Arc<Box<dyn super::sources::BlockSource>>,
@@ -58,8 +65,12 @@ impl NetworkBuilder {
             .listener_addr(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), self.listener_port));
         let chain_id = self.chain_spec.inner.chain().id();
 
-        let (block_poller, start_tx) =
-            BlockPoller::new_suspended(chain_id, block_source, blockhash_cache);
+        let (block_poller, start_tx) = BlockPoller::new_suspended(
+            chain_id,
+            block_source,
+            blockhash_cache,
+            self.debug_cutoff_height,
+        );
         let config = builder.block_import(Box::new(block_poller)).build(Arc::new(NoopProvider::<
             HlChainSpec,
             HlPrimitives,
@@ -77,10 +88,12 @@ pub async fn create_network_manager<BS>(
     destination_peer: String,
     block_source: Arc<Box<dyn super::sources::BlockSource>>,
     blockhash_cache: BlockHashCache,
+    debug_cutoff_height: Option<u64>,
 ) -> eyre::Result<(NetworkManager<HlNetworkPrimitives>, mpsc::Sender<()>)> {
     NetworkBuilder::default()
         .with_boot_nodes(vec![TrustedPeer::from_str(&destination_peer).unwrap()])
         .with_chain_spec(chain_spec)
+        .with_debug_cutoff_height(debug_cutoff_height)
         .build::<BS>(block_source, blockhash_cache)
         .await
 }
