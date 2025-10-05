@@ -32,6 +32,7 @@ use reth_rpc_eth_api::{
     helpers::{EthBlocks, EthTransactions, LoadReceipt},
     transaction::ConvertReceiptInput,
 };
+use reth_rpc_eth_types::EthApiError;
 use serde::Serialize;
 use std::{marker::PhantomData, sync::Arc};
 use tokio_stream::{Stream, StreamExt};
@@ -654,6 +655,9 @@ where
         block_id: BlockId,
     ) -> RpcResult<Option<Vec<RpcReceipt<Eth::NetworkTypes>>>> {
         trace!(target: "rpc::eth", ?block_id, "Serving eth_getBlockReceipts");
+        if self.eth_api.provider().block_by_id(block_id).map_err(EthApiError::from)?.is_none() {
+            return Ok(None);
+        }
         let result =
             adjust_block_receipts(block_id, &*self.eth_api).instrument(engine_span!()).await?;
         Ok(result.map(|(_, receipts)| receipts))
