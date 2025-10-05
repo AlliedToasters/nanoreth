@@ -46,7 +46,7 @@ impl BlockSourceConfig {
                     .expect("home dir not found")
                     .join("hl")
                     .join("data")
-                    .join("evm_blocks_and_receipts"),
+                    .join("evm_block_and_receipts"),
             },
             block_source_from_node: None,
         }
