@@ -1,20 +1,20 @@
 #![allow(clippy::owned_cow)]
 use crate::{
+    HlBlock,
     consensus::HlConsensus,
     node::{
-        network::block_import::{handle::ImportHandle, service::ImportService, HlBlockImport},
+        HlNode,
+        network::block_import::{HlBlockImport, handle::ImportHandle, service::ImportService},
         primitives::HlPrimitives,
         rpc::engine_api::payload::HlPayloadTypes,
         types::ReadPrecompileCalls,
-        HlNode,
     },
-    pseudo_peer::{start_pseudo_peer, BlockSourceConfig},
-    HlBlock,
+    pseudo_peer::{BlockSourceConfig, start_pseudo_peer},
 };
 use alloy_rlp::{Decodable, Encodable};
 use reth::{
     api::{FullNodeTypes, TxTy},
-    builder::{components::NetworkBuilder, BuilderContext},
+    builder::{BuilderContext, components::NetworkBuilder},
     transaction_pool::{PoolTransaction, TransactionPool},
 };
 use reth_discv4::NodeRecord;
@@ -26,7 +26,7 @@ use reth_network_api::PeersInfo;
 use reth_provider::StageCheckpointReader;
 use reth_stages_types::StageId;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tracing::info;
 
 pub mod block_import;
@@ -38,8 +38,8 @@ pub struct HlNewBlock(pub NewBlock<HlBlock>);
 mod rlp {
     use super::*;
     use crate::{
-        node::primitives::{BlockBody, TransactionSigned},
         HlBlockBody,
+        node::primitives::{BlockBody, TransactionSigned},
     };
     use alloy_consensus::{BlobTransactionSidecar, Header};
     use alloy_primitives::{Address, U128};

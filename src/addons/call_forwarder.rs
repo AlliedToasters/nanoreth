@@ -2,18 +2,18 @@ use alloy_eips::BlockId;
 use alloy_json_rpc::RpcObject;
 use alloy_primitives::{Bytes, U256};
 use alloy_rpc_types_eth::{
-    state::{EvmOverrides, StateOverride},
     BlockOverrides,
+    state::{EvmOverrides, StateOverride},
 };
 use jsonrpsee::{
     http_client::{HttpClient, HttpClientBuilder},
     proc_macros::rpc,
     rpc_params,
-    types::{error::INTERNAL_ERROR_CODE, ErrorObject},
+    types::{ErrorObject, error::INTERNAL_ERROR_CODE},
 };
-use jsonrpsee_core::{async_trait, client::ClientT, ClientError, RpcResult};
+use jsonrpsee_core::{ClientError, RpcResult, async_trait, client::ClientT};
 use reth_rpc::eth::EthApiTypes;
-use reth_rpc_eth_api::{helpers::EthCall, RpcTxReq};
+use reth_rpc_eth_api::{RpcTxReq, helpers::EthCall};
 
 #[rpc(server, namespace = "eth")]
 pub(crate) trait CallForwarderApi<TxReq: RpcObject> {

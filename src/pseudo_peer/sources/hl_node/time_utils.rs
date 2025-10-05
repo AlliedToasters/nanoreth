@@ -1,5 +1,5 @@
 use std::path::Path;
-use time::{macros::format_description, Date, OffsetDateTime, Time};
+use time::{Date, OffsetDateTime, Time, macros::format_description};
 
 pub struct TimeUtils;
 

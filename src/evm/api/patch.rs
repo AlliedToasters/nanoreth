@@ -7,8 +7,8 @@ use alloy_primitives::keccak256;
 use revm::{
     context::Host,
     interpreter::{
-        as_u64_saturated, interpreter_types::StackTr, popn_top, InstructionContext,
-        InterpreterTypes,
+        InstructionContext, InterpreterTypes, as_u64_saturated, interpreter_types::StackTr,
+        popn_top,
     },
     primitives::{BLOCK_HASH_HISTORY, U256},
 };

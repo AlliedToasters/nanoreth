@@ -1,6 +1,6 @@
 use crate::{
-    node::evm::config::{HlBlockExecutorFactory, HlEvmConfig},
     HlBlock,
+    node::evm::config::{HlBlockExecutorFactory, HlEvmConfig},
 };
 use alloy_consensus::Header;
 use reth_evm::{

@@ -1,6 +1,6 @@
 use super::{BlockSource, BlockSourceBoxed};
 use crate::node::types::BlockAndReceipts;
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, future::BoxFuture};
 use reth_network::cache::LruMap;
 use std::sync::{Arc, RwLock};
 

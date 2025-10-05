@@ -7,34 +7,37 @@
 //! For non-system transactions, we can just return the log as is, and the client will
 //! adjust the transaction index accordingly.
 
-use alloy_consensus::{transaction::TransactionMeta, BlockHeader, TxReceipt};
+use alloy_consensus::{
+    BlockHeader, TxReceipt,
+    transaction::{TransactionMeta, TxHashRef},
+};
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_json_rpc::RpcObject;
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types::{
-    pubsub::{Params, SubscriptionKind},
     BlockTransactions, Filter, FilterChanges, FilterId, Log, PendingTransactionFilterKind,
     TransactionInfo,
+    pubsub::{Params, SubscriptionKind},
 };
-use jsonrpsee::{proc_macros::rpc, PendingSubscriptionSink, SubscriptionMessage, SubscriptionSink};
-use jsonrpsee_core::{async_trait, RpcResult};
-use jsonrpsee_types::{error::INTERNAL_ERROR_CODE, ErrorObject};
+use jsonrpsee::{PendingSubscriptionSink, SubscriptionMessage, SubscriptionSink, proc_macros::rpc};
+use jsonrpsee_core::{RpcResult, async_trait};
+use jsonrpsee_types::{ErrorObject, error::INTERNAL_ERROR_CODE};
 use reth::{api::FullNodeComponents, builder::rpc::RpcContext, tasks::TaskSpawner};
 use reth_primitives_traits::{BlockBody as _, SignedTransaction};
 use reth_provider::{BlockIdReader, BlockReader, BlockReaderIdExt, ReceiptProvider};
-use reth_rpc::{eth::pubsub::SubscriptionSerializeError, EthFilter, EthPubSub, RpcTypes};
+use reth_rpc::{EthFilter, EthPubSub, RpcTypes, eth::pubsub::SubscriptionSerializeError};
 use reth_rpc_eth_api::{
-    helpers::{EthBlocks, EthTransactions, LoadReceipt},
-    transaction::ConvertReceiptInput,
     EthApiServer, EthApiTypes, EthFilterApiServer, EthPubSubApiServer, FullEthApiTypes, RpcBlock,
     RpcConvert, RpcHeader, RpcNodeCoreExt, RpcReceipt, RpcTransaction, RpcTxReq,
+    helpers::{EthBlocks, EthTransactions, LoadReceipt},
+    transaction::ConvertReceiptInput,
 };
 use serde::Serialize;
-use std::{borrow::Cow, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 use tokio_stream::{Stream, StreamExt};
-use tracing::{trace, Instrument};
+use tracing::{Instrument, trace};
 
-use crate::{node::primitives::HlPrimitives, HlBlock};
+use crate::{HlBlock, node::primitives::HlPrimitives};
 
 pub trait EthWrapper:
     EthApiServer<
@@ -182,7 +185,7 @@ impl<Eth: EthWrapper> HlSystemTransactionExt<Eth> {
                 };
 
                 let input = ConvertReceiptInput {
-                    receipt: Cow::Borrowed(receipt),
+                    receipt: receipt.clone(),
                     tx,
                     gas_used: receipt.cumulative_gas_used() - gas_used,
                     next_log_index,
@@ -530,7 +533,7 @@ async fn adjust_block_receipts<Eth: EthWrapper>(
                 };
 
                 let input = ConvertReceiptInput {
-                    receipt: Cow::Borrowed(receipt),
+                    receipt: receipt.clone(),
                     tx,
                     gas_used: receipt.cumulative_gas_used() - gas_used,
                     next_log_index,
@@ -576,9 +579,8 @@ async fn adjust_transaction_receipt<Eth: EthWrapper>(
 fn system_tx_count_for_block<Eth: EthWrapper>(eth_api: &Eth, block_id: BlockId) -> usize {
     let provider = eth_api.provider();
     let block = provider.block_by_id(block_id).unwrap().unwrap();
-    let system_tx_count =
-        block.body.transactions().iter().filter(|tx| tx.is_system_transaction()).count();
-    system_tx_count
+    
+    block.body.transactions().iter().filter(|tx| tx.is_system_transaction()).count()
 }
 
 #[async_trait]
