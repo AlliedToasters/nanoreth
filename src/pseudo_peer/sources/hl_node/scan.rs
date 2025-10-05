@@ -18,7 +18,6 @@ pub struct ScanResult {
     pub new_block_ranges: Vec<RangeInclusive<u64>>,
 }
 
-#[derive(Debug, Clone)]
 pub struct ScanOptions {
     pub start_height: u64,
     pub only_load_ranges: bool,
@@ -122,9 +121,10 @@ impl Scanner {
         if let Some((start, end)) = current_range {
             block_ranges.push(start..=end);
         }
+
         ScanResult {
             path: line_stream.path.clone(),
-            next_expected_height: last_height + 1,
+            next_expected_height: last_height + current_range.is_some() as u64,
             new_blocks,
             new_block_ranges: block_ranges,
         }
