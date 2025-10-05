@@ -27,7 +27,7 @@ impl LocalBlocksCache {
     }
 
     pub fn get_block(&mut self, height: u64) -> Option<BlockAndReceipts> {
-        self.cache.remove(&height)
+        self.cache.get(&height).cloned()
     }
 
     pub fn get_path_for_height(&self, height: u64) -> Option<PathBuf> {
