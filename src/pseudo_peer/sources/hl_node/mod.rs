@@ -52,6 +52,8 @@ pub struct HlNodeBlockSourceMetrics {
     pub fetched_from_hl_node: Counter,
     /// How many times the HL node block source is fetched from the fallback
     pub fetched_from_fallback: Counter,
+    /// How many times `try_collect_local_block` was faster than ingest loop
+    pub file_read_triggered: Counter,
 }
 
 impl BlockSource for HlNodeBlockSource {
@@ -64,7 +66,9 @@ impl BlockSource for HlNodeBlockSource {
         Box::pin(async move {
             let now = OffsetDateTime::now_utc();
 
-            if let Some(block) = Self::try_collect_local_block(local_blocks_cache, height).await {
+            if let Some(block) =
+                Self::try_collect_local_block(&metrics, local_blocks_cache, height).await
+            {
                 Self::update_last_fetch(last_local_fetch, height, now).await;
                 metrics.fetched_from_hl_node.increment(1);
                 return Ok(block);
@@ -155,6 +159,7 @@ impl HlNodeBlockSource {
     }
 
     async fn try_collect_local_block(
+        metrics: &HlNodeBlockSourceMetrics,
         local_blocks_cache: Arc<Mutex<LocalBlocksCache>>,
         height: u64,
     ) -> Option<BlockAndReceipts> {
@@ -164,6 +169,7 @@ impl HlNodeBlockSource {
         }
         let path = u_cache.get_path_for_height(height)?;
         info!("Loading block data from {:?}", path);
+        metrics.file_read_triggered.increment(1);
         let mut line_stream = LineStream::from_path(&path).ok()?;
         let scan_result = Scanner::scan_hour_file(
             &mut line_stream,
