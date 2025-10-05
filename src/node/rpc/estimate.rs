@@ -82,11 +82,12 @@ where
         let mut tx_env = self.create_txn_env(&evm_env, request, &mut db)?;
 
         let mut is_basic_transfer = false;
-        if tx_env.input().is_empty()
-            && let TxKind::Call(to) = tx_env.kind()
-                && let Ok(code) = db.db.account_code(&to) {
-                    is_basic_transfer = code.map(|code| code.is_empty()).unwrap_or(true);
-                }
+        if tx_env.input().is_empty() &&
+            let TxKind::Call(to) = tx_env.kind() &&
+            let Ok(code) = db.db.account_code(&to)
+        {
+            is_basic_transfer = code.map(|code| code.is_empty()).unwrap_or(true);
+        }
 
         if tx_env.gas_price() > 0 {
             highest_gas_limit =
@@ -105,10 +106,11 @@ where
             let mut min_tx_env = tx_env.clone();
             min_tx_env.set_gas_limit(MIN_TRANSACTION_GAS);
 
-            if let Ok(res) = evm.transact(min_tx_env).map_err(Self::Error::from_evm_err)
-                && res.result.is_success() {
-                    return Ok(U256::from(MIN_TRANSACTION_GAS));
-                }
+            if let Ok(res) = evm.transact(min_tx_env).map_err(Self::Error::from_evm_err) &&
+                res.result.is_success()
+            {
+                return Ok(U256::from(MIN_TRANSACTION_GAS));
+            }
         }
 
         trace!(target: "rpc::eth::estimate", ?tx_env, gas_limit = tx_env.gas_limit(), is_basic_transfer, "Starting gas estimation");
