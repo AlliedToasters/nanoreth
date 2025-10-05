@@ -1,7 +1,7 @@
 use crate::{hardforks::HlHardforks, node::HlNode, HlBlock, HlBlockBody, HlPrimitives};
 use alloy_consensus::Header;
 use reth::{
-    api::FullNodeTypes,
+    api::{FullNodeTypes, NodeTypes},
     beacon_consensus::EthBeaconConsensus,
     builder::{components::ConsensusBuilder, BuilderContext},
     consensus::{Consensus, ConsensusError, FullConsensus, HeaderValidator},
@@ -24,7 +24,7 @@ impl<Node> ConsensusBuilder<Node> for HlConsensusBuilder
 where
     Node: FullNodeTypes<Types = HlNode>,
 {
-    type Consensus = Arc<dyn FullConsensus<HlPrimitives, Error = ConsensusError>>;
+    type Consensus = Arc<HlConsensus<<Node::Types as NodeTypes>::ChainSpec>>;
 
     async fn build_consensus(self, ctx: &BuilderContext<Node>) -> eyre::Result<Self::Consensus> {
         Ok(Arc::new(HlConsensus::new(ctx.chain_spec())))

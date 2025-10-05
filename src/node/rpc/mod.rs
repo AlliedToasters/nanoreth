@@ -1,7 +1,7 @@
 use crate::{
+    HlBlock, HlPrimitives,
     chainspec::HlChainSpec,
     node::{evm::apply_precompiles, types::HlExtras},
-    HlBlock, HlPrimitives,
 };
 use alloy_eips::BlockId;
 use alloy_evm::Evm;
@@ -10,19 +10,19 @@ use alloy_primitives::U256;
 use reth::{
     api::{FullNodeTypes, HeaderTy, NodeTypes, PrimitivesTy},
     builder::{
-        rpc::{EthApiBuilder, EthApiCtx},
         FullNodeComponents,
+        rpc::{EthApiBuilder, EthApiCtx},
     },
     rpc::{
-        eth::{core::EthApiInner, DevSigner, FullEthApiServer},
+        eth::{DevSigner, FullEthApiServer, core::EthApiInner},
         server_types::eth::{
-            receipt::EthReceiptConverter, EthApiError, EthStateCache, FeeHistoryCache,
-            GasPriceOracle,
+            EthApiError, EthStateCache, FeeHistoryCache, GasPriceOracle,
+            receipt::EthReceiptConverter,
         },
     },
     tasks::{
-        pool::{BlockingTaskGuard, BlockingTaskPool},
         TaskSpawner,
+        pool::{BlockingTaskGuard, BlockingTaskPool},
     },
 };
 use reth_evm::{ConfigureEvm, Database, EvmEnvFor, HaltReasonFor, InspectorFor, TxEnvFor};
@@ -32,12 +32,12 @@ use reth_provider::{
 };
 use reth_rpc::RpcTypes;
 use reth_rpc_eth_api::{
-    helpers::{
-        pending_block::BuildPendingEnv, spec::SignersForApi, AddDevSigners, EthApiSpec, EthFees,
-        EthState, LoadFee, LoadPendingBlock, LoadState, SpawnBlocking, Trace,
-    },
     EthApiTypes, FromEvmError, RpcConvert, RpcConverter, RpcNodeCore, RpcNodeCoreExt,
     SignableTxRequest,
+    helpers::{
+        AddDevSigners, EthApiSpec, EthFees, EthState, LoadFee, LoadPendingBlock, LoadState,
+        SpawnBlocking, Trace, pending_block::BuildPendingEnv, spec::SignersForApi,
+    },
 };
 use revm::context::result::ResultAndState;
 use std::{fmt, marker::PhantomData, sync::Arc};
@@ -60,10 +60,15 @@ pub(crate) struct HlEthApiInner<N: HlRpcNodeCore, Rpc: RpcConvert> {
 type HlRpcConvert<N, NetworkT> =
     RpcConverter<NetworkT, <N as FullNodeComponents>::Evm, EthReceiptConverter<HlChainSpec>>;
 
-#[derive(Clone)]
 pub struct HlEthApi<N: HlRpcNodeCore, Rpc: RpcConvert> {
     /// Gateway to node's core components.
     pub(crate) inner: Arc<HlEthApiInner<N, Rpc>>,
+}
+
+impl<N: HlRpcNodeCore, Rpc: RpcConvert> Clone for HlEthApi<N, Rpc> {
+    fn clone(&self) -> Self {
+        Self { inner: self.inner.clone() }
+    }
 }
 
 impl<N, Rpc> fmt::Debug for HlEthApi<N, Rpc>
@@ -79,7 +84,7 @@ where
 impl<N, Rpc> EthApiTypes for HlEthApi<N, Rpc>
 where
     N: HlRpcNodeCore,
-    Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
+    Rpc: RpcConvert<Primitives = N::Primitives>,
 {
     type Error = EthApiError;
     type NetworkTypes = Rpc::Network;
@@ -155,7 +160,7 @@ where
 impl<N, Rpc> SpawnBlocking for HlEthApi<N, Rpc>
 where
     N: HlRpcNodeCore,
-    Rpc: RpcConvert<Primitives = N::Primitives, Error = EthApiError>,
+    Rpc: RpcConvert<Primitives = N::Primitives>,
 {
     #[inline]
     fn io_task_spawner(&self) -> impl TaskSpawner {

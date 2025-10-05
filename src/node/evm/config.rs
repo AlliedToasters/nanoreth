@@ -106,7 +106,10 @@ where
             } else {
                 // for the first post-fork block, both parent.blob_gas_used and
                 // parent.excess_blob_gas are evaluated as 0
-                Some(alloy_eips::eip7840::BlobParams::cancun().next_block_excess_blob_gas(0, 0))
+                Some(
+                    alloy_eips::eip7840::BlobParams::cancun()
+                        .next_block_excess_blob_gas_osaka(0, 0, 0),
+                )
             };
         }
 
@@ -284,7 +287,7 @@ where
         self
     }
 
-    fn evm_env(&self, header: &Header) -> EvmEnv<HlSpecId> {
+    fn evm_env(&self, header: &Header) -> Result<EvmEnv<HlSpecId>, Self::Error> {
         let blob_params = self.chain_spec().blob_params_at_timestamp(header.timestamp);
         let spec = revm_spec_by_timestamp_and_block_number(
             self.chain_spec().clone(),
@@ -324,7 +327,7 @@ where
             blob_excess_gas_and_price,
         };
 
-        EvmEnv { cfg_env, block_env }
+        Ok(EvmEnv { cfg_env, block_env })
     }
 
     fn next_evm_env(
@@ -373,9 +376,9 @@ where
     fn context_for_block<'a>(
         &self,
         block: &'a SealedBlock<BlockTy<Self::Primitives>>,
-    ) -> ExecutionCtxFor<'a, Self> {
+    ) -> Result<ExecutionCtxFor<'a, Self>, Self::Error> {
         let block_body = block.body();
-        HlBlockExecutionCtx {
+        Ok(HlBlockExecutionCtx {
             ctx: EthBlockExecutionCtx {
                 parent_hash: block.header().parent_hash,
                 parent_beacon_block_root: block.header().parent_beacon_block_root,
@@ -386,15 +389,15 @@ where
                 read_precompile_calls: block_body.read_precompile_calls.clone(),
                 highest_precompile_address: block_body.highest_precompile_address,
             },
-        }
+        })
     }
 
     fn context_for_next_block(
         &self,
         parent: &SealedHeader<HeaderTy<Self::Primitives>>,
         attributes: Self::NextBlockEnvCtx,
-    ) -> ExecutionCtxFor<'_, Self> {
-        HlBlockExecutionCtx {
+    ) -> Result<ExecutionCtxFor<'_, Self>, Self::Error> {
+        Ok(HlBlockExecutionCtx {
             ctx: EthBlockExecutionCtx {
                 parent_hash: parent.hash(),
                 parent_beacon_block_root: attributes.parent_beacon_block_root,
@@ -402,13 +405,13 @@ where
                 withdrawals: attributes.withdrawals.map(Cow::Owned),
             },
             extras: HlExtras::default(), // TODO: hacky, double check if this is correct
-        }
+        })
     }
 }
 
 impl ConfigureEngineEvm<HlExecutionData> for HlEvmConfig {
     fn evm_env_for_payload(&self, payload: &HlExecutionData) -> EvmEnvFor<Self> {
-        self.evm_env(&payload.0.header)
+        self.evm_env(&payload.0.header).unwrap()
     }
 
     fn context_for_payload<'a>(&self, payload: &'a HlExecutionData) -> ExecutionCtxFor<'a, Self> {

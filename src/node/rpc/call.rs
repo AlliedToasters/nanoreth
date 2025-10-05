@@ -3,11 +3,11 @@ use core::fmt;
 use super::{HlEthApi, HlRpcNodeCore};
 use crate::{node::evm::apply_precompiles, HlBlock};
 use alloy_evm::Evm;
+use alloy_consensus::transaction::TxHashRef;
 use alloy_primitives::B256;
 use reth::rpc::server_types::eth::EthApiError;
 use reth_evm::{ConfigureEvm, Database, EvmEnvFor, HaltReasonFor, InspectorFor, SpecFor, TxEnvFor};
 use reth_primitives::{NodePrimitives, Recovered};
-use reth_primitives_traits::SignedTransaction;
 use reth_provider::{ProviderError, ProviderTx};
 use reth_rpc_eth_api::{
     helpers::{Call, EthCall},

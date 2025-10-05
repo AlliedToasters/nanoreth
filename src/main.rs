@@ -27,11 +27,6 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 fn main() -> eyre::Result<()> {
     reth_cli_util::sigsegv_handler::install();
 
-    // Enable backtraces unless a RUST_BACKTRACE value has already been explicitly provided.
-    if std::env::var_os("RUST_BACKTRACE").is_none() {
-        std::env::set_var("RUST_BACKTRACE", "1");
-    }
-
     // Initialize custom version metadata before parsing CLI so --version uses reth-hl values
     reth_hl::version::init_reth_hl_version();
 
@@ -80,8 +75,8 @@ fn main() -> eyre::Result<()> {
 
                     Ok(())
                 })
-                .apply(|builder| {
-                    builder.db().create_tables_for::<Tables>().expect("create tables");
+                .apply(|mut builder| {
+                    builder.db_mut().create_tables_for::<Tables>().expect("create tables");
                     builder
                 })
                 .launch()

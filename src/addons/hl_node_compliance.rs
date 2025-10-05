@@ -7,7 +7,10 @@
 //! For non-system transactions, we can just return the log as is, and the client will
 //! adjust the transaction index accordingly.
 
-use alloy_consensus::{transaction::TransactionMeta, BlockHeader, TxReceipt};
+use alloy_consensus::{
+    BlockHeader, TxReceipt,
+    transaction::{TransactionMeta, TxHashRef},
+};
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_json_rpc::RpcObject;
 use alloy_primitives::{B256, U256};
@@ -30,7 +33,7 @@ use reth_rpc_eth_api::{
     RpcConvert, RpcHeader, RpcNodeCoreExt, RpcReceipt, RpcTransaction, RpcTxReq,
 };
 use serde::Serialize;
-use std::{borrow::Cow, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 use tokio_stream::{Stream, StreamExt};
 use tracing::{trace, Instrument};
 
@@ -182,7 +185,7 @@ impl<Eth: EthWrapper> HlSystemTransactionExt<Eth> {
                 };
 
                 let input = ConvertReceiptInput {
-                    receipt: Cow::Borrowed(receipt),
+                    receipt: receipt.clone(),
                     tx,
                     gas_used: receipt.cumulative_gas_used() - gas_used,
                     next_log_index,
@@ -530,7 +533,7 @@ async fn adjust_block_receipts<Eth: EthWrapper>(
                 };
 
                 let input = ConvertReceiptInput {
-                    receipt: Cow::Borrowed(receipt),
+                    receipt: receipt.clone(),
                     tx,
                     gas_used: receipt.cumulative_gas_used() - gas_used,
                     next_log_index,
