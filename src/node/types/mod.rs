@@ -5,21 +5,32 @@
 use alloy_primitives::{Address, B256, Bytes, Log};
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use bytes::BufMut;
+use reth_primitives_traits::InMemorySize;
 use serde::{Deserialize, Serialize};
 
 use crate::HlBlock;
 
 pub type ReadPrecompileCall = (Address, Vec<(ReadPrecompileInput, ReadPrecompileResult)>);
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Default, Hash)]
 pub struct ReadPrecompileCalls(pub Vec<ReadPrecompileCall>);
 
 pub(crate) mod reth_compat;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Default, RlpEncodable, RlpDecodable, Eq, PartialEq, Hash,
+)]
+#[rlp(trailing)]
 pub struct HlExtras {
     pub read_precompile_calls: Option<ReadPrecompileCalls>,
     pub highest_precompile_address: Option<Address>,
+}
+
+impl InMemorySize for HlExtras {
+    fn size(&self) -> usize {
+        self.read_precompile_calls.as_ref().map_or(0, |s| s.0.len())
+            + self.highest_precompile_address.as_ref().map_or(0, |_| 20)
+    }
 }
 
 impl Encodable for ReadPrecompileCalls {
@@ -117,7 +128,7 @@ pub struct ReadPrecompileInput {
     pub gas_limit: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub enum ReadPrecompileResult {
     Ok { gas_used: u64, bytes: Bytes },
     OutOfGas,

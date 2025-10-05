@@ -9,6 +9,7 @@ pub mod block;
 pub use block::HlBlock;
 pub mod body;
 pub use body::HlBlockBody;
+pub mod header;
 
 pub mod rlp;
 pub mod serde_bincode_compat;
