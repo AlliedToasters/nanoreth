@@ -579,9 +579,8 @@ async fn adjust_transaction_receipt<Eth: EthWrapper>(
 fn system_tx_count_for_block<Eth: EthWrapper>(eth_api: &Eth, block_id: BlockId) -> usize {
     let provider = eth_api.provider();
     let block = provider.block_by_id(block_id).unwrap().unwrap();
-    let system_tx_count =
-        block.body.transactions().iter().filter(|tx| tx.is_system_transaction()).count();
-    system_tx_count
+    
+    block.body.transactions().iter().filter(|tx| tx.is_system_transaction()).count()
 }
 
 #[async_trait]
