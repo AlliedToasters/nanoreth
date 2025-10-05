@@ -8,7 +8,7 @@ mod time_utils;
 use self::{
     cache::LocalBlocksCache,
     file_ops::FileOperations,
-    scan::{ScanOptions, Scanner},
+    scan::{LineStream, ScanOptions, Scanner},
     time_utils::TimeUtils,
 };
 use super::{BlockSource, BlockSourceBoxed};
@@ -120,6 +120,28 @@ impl BlockSource for HlNodeBlockSource {
     }
 }
 
+struct CurrentFile {
+    path: PathBuf,
+    line_stream: Option<LineStream>,
+}
+
+impl CurrentFile {
+    pub fn from_datetime(dt: OffsetDateTime, root: &Path) -> Self {
+        let (hour, day_str) = (dt.hour(), TimeUtils::date_from_datetime(dt));
+        let path = root.join(HOURLY_SUBDIR).join(&day_str).join(format!("{}", hour));
+        Self { path, line_stream: None }
+    }
+
+    pub fn open(&mut self) -> eyre::Result<()> {
+        if self.line_stream.is_some() {
+            return Ok(());
+        }
+
+        self.line_stream = Some(LineStream::from_path(&self.path)?);
+        Ok(())
+    }
+}
+
 impl HlNodeBlockSource {
     async fn update_last_fetch(
         last_local_fetch: Arc<Mutex<Option<(u64, OffsetDateTime)>>>,
@@ -142,9 +164,9 @@ impl HlNodeBlockSource {
         }
         let path = u_cache.get_path_for_height(height)?;
         info!("Loading block data from {:?}", path);
+        let mut line_stream = LineStream::from_path(&path).ok()?;
         let scan_result = Scanner::scan_hour_file(
-            &path,
-            &mut 0,
+            &mut line_stream,
             ScanOptions { start_height: 0, only_load_ranges: false },
         );
         u_cache.load_scan_result(scan_result);
@@ -165,9 +187,10 @@ impl HlNodeBlockSource {
             } else {
                 warn!("Failed to parse last line of file: {:?}", subfile);
             }
+            let mut line_stream =
+                LineStream::from_path(&subfile).expect("Failed to open line stream");
             let mut scan_result = Scanner::scan_hour_file(
-                &subfile,
-                &mut 0,
+                &mut line_stream,
                 ScanOptions { start_height: cutoff_height, only_load_ranges: true },
             );
             scan_result.new_blocks.clear(); // Only store ranges, load data lazily
@@ -188,15 +211,13 @@ impl HlNodeBlockSource {
                 }
                 tokio::time::sleep(TAIL_INTERVAL).await;
             };
-            let (mut hour, mut day_str, mut last_line) =
-                (dt.hour(), TimeUtils::date_from_datetime(dt), 0);
+            let mut current_file = CurrentFile::from_datetime(dt, &root);
             info!("Starting local ingest loop from height: {}", current_head);
             loop {
-                let hour_file = root.join(HOURLY_SUBDIR).join(&day_str).join(format!("{hour}"));
-                if hour_file.exists() {
+                let _ = current_file.open();
+                if let Some(line_stream) = &mut current_file.line_stream {
                     let scan_result = Scanner::scan_hour_file(
-                        &hour_file,
-                        &mut last_line,
+                        line_stream,
                         ScanOptions { start_height: next_height, only_load_ranges: false },
                     );
                     next_height = scan_result.next_expected_height;
@@ -205,11 +226,8 @@ impl HlNodeBlockSource {
                 let now = OffsetDateTime::now_utc();
                 if dt + ONE_HOUR < now {
                     dt += ONE_HOUR;
-                    (hour, day_str, last_line) = (dt.hour(), TimeUtils::date_from_datetime(dt), 0);
-                    info!(
-                        "Moving to new file: {:?}",
-                        root.join(HOURLY_SUBDIR).join(&day_str).join(format!("{hour}"))
-                    );
+                    current_file = CurrentFile::from_datetime(dt, &root);
+                    info!("Moving to new file: {:?}", current_file.path);
                     continue;
                 }
                 tokio::time::sleep(TAIL_INTERVAL).await;
