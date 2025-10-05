@@ -1,4 +1,4 @@
-use super::{scan::Scanner, time_utils::TimeUtils, HOURLY_SUBDIR};
+use super::{HOURLY_SUBDIR, scan::Scanner, time_utils::TimeUtils};
 use crate::node::types::BlockAndReceipts;
 use std::{
     fs::File,

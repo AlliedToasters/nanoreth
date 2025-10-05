@@ -1,5 +1,6 @@
 use super::{executor::HlBlockExecutor, factory::HlEvmFactory};
 use crate::{
+    HlBlock, HlBlockBody, HlPrimitives,
     chainspec::HlChainSpec,
     evm::{spec::HlSpecId, transaction::HlTxEnv},
     hardforks::HlHardforks,
@@ -9,31 +10,30 @@ use crate::{
         rpc::engine_api::validator::HlExecutionData,
         types::HlExtras,
     },
-    HlBlock, HlBlockBody, HlPrimitives,
 };
-use alloy_consensus::{BlockHeader, Header, Transaction as _, TxReceipt, EMPTY_OMMER_ROOT_HASH};
-use alloy_eips::{merge::BEACON_NONCE, Encodable2718};
+use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header, Transaction as _, TxReceipt};
+use alloy_eips::{Encodable2718, merge::BEACON_NONCE};
 use alloy_primitives::{Log, U256};
 use reth_chainspec::{EthChainSpec, EthereumHardforks, Hardforks};
 use reth_evm::{
-    block::{BlockExecutionError, BlockExecutorFactory, BlockExecutorFor},
-    eth::{receipt_builder::ReceiptBuilder, EthBlockExecutionCtx},
-    execute::{BlockAssembler, BlockAssemblerInput},
-    precompiles::PrecompilesMap,
     ConfigureEngineEvm, ConfigureEvm, EvmEnv, EvmEnvFor, EvmFactory, ExecutableTxIterator,
     ExecutionCtxFor, FromRecoveredTx, FromTxWithEncoded, IntoTxEnv, NextBlockEnvAttributes,
+    block::{BlockExecutionError, BlockExecutorFactory, BlockExecutorFor},
+    eth::{EthBlockExecutionCtx, receipt_builder::ReceiptBuilder},
+    execute::{BlockAssembler, BlockAssemblerInput},
+    precompiles::PrecompilesMap,
 };
 use reth_evm_ethereum::EthBlockAssembler;
 use reth_payload_primitives::NewPayloadError;
-use reth_primitives::{logs_bloom, BlockTy, HeaderTy, Receipt, SealedBlock, SealedHeader};
-use reth_primitives_traits::{proofs, SignerRecoverable, WithEncoded};
+use reth_primitives::{BlockTy, HeaderTy, Receipt, SealedBlock, SealedHeader, logs_bloom};
+use reth_primitives_traits::{SignerRecoverable, WithEncoded, proofs};
 use reth_provider::BlockExecutionResult;
 use reth_revm::State;
 use revm::{
+    Inspector,
     context::{BlockEnv, CfgEnv, TxEnv},
     context_interface::block::BlobExcessGasAndPrice,
     primitives::hardfork::SpecId,
-    Inspector,
 };
 use std::{borrow::Cow, convert::Infallible, sync::Arc};
 
@@ -45,10 +45,10 @@ pub struct HlBlockAssembler {
 impl<F> BlockAssembler<F> for HlBlockAssembler
 where
     F: for<'a> BlockExecutorFactory<
-        ExecutionCtx<'a> = HlBlockExecutionCtx<'a>,
-        Transaction = TransactionSigned,
-        Receipt = Receipt,
-    >,
+            ExecutionCtx<'a> = HlBlockExecutionCtx<'a>,
+            Transaction = TransactionSigned,
+            Receipt = Receipt,
+        >,
 {
     type Block = HlBlock;
 
@@ -240,9 +240,9 @@ where
     R: ReceiptBuilder<Transaction = TransactionSigned, Receipt: TxReceipt<Log = Log>>,
     Spec: EthereumHardforks + HlHardforks + EthChainSpec + Hardforks + Clone,
     EvmF: EvmFactory<
-        Tx: FromRecoveredTx<TransactionSigned> + FromTxWithEncoded<TransactionSigned>,
-        Precompiles = PrecompilesMap,
-    >,
+            Tx: FromRecoveredTx<TransactionSigned> + FromTxWithEncoded<TransactionSigned>,
+            Precompiles = PrecompilesMap,
+        >,
     R::Transaction: From<TransactionSigned> + Clone,
     Self: 'static,
     HlTxEnv<TxEnv>: IntoTxEnv<<EvmF as EvmFactory>::Tx>,

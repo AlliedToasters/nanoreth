@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use reth_node_core::version::{try_init_version_metadata, RethCliVersionConsts};
+use reth_node_core::version::{RethCliVersionConsts, try_init_version_metadata};
 
 pub fn init_reth_hl_version() {
     let cargo_pkg_version = env!("CARGO_PKG_VERSION").to_string();

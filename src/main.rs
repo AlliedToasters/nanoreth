@@ -9,12 +9,12 @@ use reth_hl::{
         hl_node_compliance::install_hl_node_compliance,
         tx_forwarder::{self, EthForwarderApiServer},
     },
-    chainspec::{parser::HlChainSpecParser, HlChainSpec},
+    chainspec::{HlChainSpec, parser::HlChainSpecParser},
     node::{
+        HlNode,
         cli::{Cli, HlNodeArgs},
         rpc::precompile::{HlBlockPrecompileApiServer, HlBlockPrecompileExt},
         storage::tables::Tables,
-        HlNode,
     },
 };
 use tracing::info;

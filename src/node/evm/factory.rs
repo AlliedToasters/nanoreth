@@ -7,16 +7,16 @@ use crate::evm::{
     spec::HlSpecId,
     transaction::HlTxEnv,
 };
-use reth_evm::{precompiles::PrecompilesMap, Database, EvmEnv, EvmFactory};
+use reth_evm::{Database, EvmEnv, EvmFactory, precompiles::PrecompilesMap};
 use reth_revm::Context;
 use revm::{
+    Inspector,
     context::{
-        result::{EVMError, HaltReason},
         TxEnv,
+        result::{EVMError, HaltReason},
     },
     inspector::NoOpInspector,
     precompile::{PrecompileSpecId, Precompiles},
-    Inspector,
 };
 
 /// Factory producing [`HlEvm`].

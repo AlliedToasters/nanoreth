@@ -2,7 +2,7 @@
 use alloy_chains::{Chain, NamedChain};
 use core::any::Any;
 use reth_chainspec::ForkCondition;
-use reth_ethereum_forks::{hardfork, ChainHardforks, EthereumHardfork, Hardfork};
+use reth_ethereum_forks::{ChainHardforks, EthereumHardfork, Hardfork, hardfork};
 
 hardfork!(
     /// The name of a hl hardfork.

@@ -1,5 +1,5 @@
-use super::{apply_precompiles, HlEthApi, HlRpcNodeCore};
-use alloy_evm::overrides::{apply_state_overrides, StateOverrideError};
+use super::{HlEthApi, HlRpcNodeCore, apply_precompiles};
+use alloy_evm::overrides::{StateOverrideError, apply_state_overrides};
 use alloy_network::TransactionBuilder;
 use alloy_primitives::{TxKind, U256};
 use alloy_rpc_types_eth::state::StateOverride;
@@ -9,19 +9,19 @@ use reth_evm::{ConfigureEvm, Evm, EvmEnvFor, SpecFor, TransactionEnv, TxEnvFor};
 use reth_revm::{database::StateProviderDatabase, db::CacheDB};
 use reth_rpc_convert::{RpcConvert, RpcTxReq};
 use reth_rpc_eth_api::{
-    helpers::{
-        estimate::{update_estimated_gas_range, EstimateCall},
-        Call,
-    },
     AsEthApiError, IntoEthApiError, RpcNodeCore,
+    helpers::{
+        Call,
+        estimate::{EstimateCall, update_estimated_gas_range},
+    },
 };
 use reth_rpc_eth_types::{
-    error::{api::FromEvmHalt, FromEvmError},
     EthApiError, RevertError, RpcInvalidTransactionError,
+    error::{FromEvmError, api::FromEvmHalt},
 };
 use reth_rpc_server_types::constants::gas_oracle::{CALL_STIPEND_GAS, ESTIMATE_GAS_ERROR_RATIO};
 use reth_storage_api::StateProvider;
-use revm::context_interface::{result::ExecutionResult, Transaction};
+use revm::context_interface::{Transaction, result::ExecutionResult};
 use tracing::trace;
 
 impl<N, Rpc> EstimateCall for HlEthApi<N, Rpc>
@@ -30,11 +30,11 @@ where
     N: HlRpcNodeCore,
     EthApiError: FromEvmError<N::Evm> + From<StateOverrideError<ProviderError>>,
     Rpc: RpcConvert<
-        Primitives = N::Primitives,
-        Error = EthApiError,
-        TxEnv = TxEnvFor<N::Evm>,
-        Spec = SpecFor<N::Evm>,
-    >,
+            Primitives = N::Primitives,
+            Error = EthApiError,
+            TxEnv = TxEnvFor<N::Evm>,
+            Spec = SpecFor<N::Evm>,
+        >,
 {
     // Modified version that adds `apply_precompiles`; comments are stripped out.
     fn estimate_gas_with<S>(

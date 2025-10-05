@@ -1,4 +1,4 @@
-use alloy_primitives::{address, Address};
+use alloy_primitives::{Address, address};
 use reth_evm::block::BlockExecutionError;
 use revm::{primitives::HashMap, state::Account};
 

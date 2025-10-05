@@ -10,12 +10,12 @@ use std::{
 use tracing::info;
 
 use crate::{
+    HlBlock, HlBlockBody,
     node::{
         primitives::TransactionSigned as TxSigned,
-        spot_meta::{erc20_contract_to_spot_token, SpotId},
+        spot_meta::{SpotId, erc20_contract_to_spot_token},
         types::{ReadPrecompileCalls, SystemTx},
     },
-    HlBlock, HlBlockBody,
 };
 
 /// A raw transaction.

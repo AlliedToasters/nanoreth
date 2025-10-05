@@ -2,8 +2,8 @@ use super::HlEvmInner;
 use crate::evm::{spec::HlSpecId, transaction::HlTxTr};
 use reth_revm::context::ContextTr;
 use revm::{
-    context::Cfg, context_interface::Block, handler::instructions::EthInstructions,
-    interpreter::interpreter::EthInterpreter, Context, Database,
+    Context, Database, context::Cfg, context_interface::Block,
+    handler::instructions::EthInstructions, interpreter::interpreter::EthInterpreter,
 };
 
 /// Trait that allows for hl HlEvm to be built.

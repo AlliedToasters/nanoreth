@@ -1,8 +1,8 @@
-use super::{utils, BlockSource};
+use super::{BlockSource, utils};
 use crate::node::types::BlockAndReceipts;
 use aws_sdk_s3::types::RequestPayer;
-use futures::{future::BoxFuture, FutureExt};
-use reth_metrics::{metrics, metrics::Counter, Metrics};
+use futures::{FutureExt, future::BoxFuture};
+use reth_metrics::{Metrics, metrics, metrics::Counter};
 use std::{sync::Arc, time::Duration};
 use tracing::info;
 

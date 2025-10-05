@@ -1,16 +1,16 @@
 use super::HlEvmInner;
 use crate::evm::{spec::HlSpecId, transaction::HlTxTr};
 use revm::{
-    context::{result::HaltReason, ContextSetters},
-    context_interface::{
-        result::{EVMError, ExecutionResult, ResultAndState},
-        Cfg, ContextTr, Database, JournalTr,
-    },
-    handler::{instructions::EthInstructions, PrecompileProvider},
-    inspector::{InspectCommitEvm, InspectEvm, Inspector, JournalExt},
-    interpreter::{interpreter::EthInterpreter, InterpreterResult},
-    state::EvmState,
     DatabaseCommit, ExecuteCommitEvm, ExecuteEvm,
+    context::{ContextSetters, result::HaltReason},
+    context_interface::{
+        Cfg, ContextTr, Database, JournalTr,
+        result::{EVMError, ExecutionResult, ResultAndState},
+    },
+    handler::{PrecompileProvider, instructions::EthInstructions},
+    inspector::{InspectCommitEvm, InspectEvm, Inspector, JournalExt},
+    interpreter::{InterpreterResult, interpreter::EthInterpreter},
+    state::EvmState,
 };
 
 // Type alias for HL context

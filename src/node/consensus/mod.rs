@@ -1,9 +1,9 @@
-use crate::{hardforks::HlHardforks, node::HlNode, HlBlock, HlBlockBody, HlPrimitives};
+use crate::{HlBlock, HlBlockBody, HlPrimitives, hardforks::HlHardforks, node::HlNode};
 use alloy_consensus::Header;
 use reth::{
     api::{FullNodeTypes, NodeTypes},
     beacon_consensus::EthBeaconConsensus,
-    builder::{components::ConsensusBuilder, BuilderContext},
+    builder::{BuilderContext, components::ConsensusBuilder},
     consensus::{Consensus, ConsensusError, FullConsensus, HeaderValidator},
     consensus_common::validation::{
         validate_against_parent_4844, validate_against_parent_hash_number,
