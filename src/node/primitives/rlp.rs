@@ -1,0 +1,142 @@
+#![allow(clippy::owned_cow)]
+use super::{HlBlock, HlBlockBody, TransactionSigned};
+use crate::node::types::ReadPrecompileCalls;
+use alloy_consensus::{BlobTransactionSidecar, BlockBody, Header};
+use alloy_eips::eip4895::Withdrawals;
+use alloy_primitives::Address;
+use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
+use std::borrow::Cow;
+
+#[derive(RlpEncodable, RlpDecodable)]
+#[rlp(trailing)]
+struct BlockBodyHelper<'a> {
+    transactions: Cow<'a, Vec<TransactionSigned>>,
+    ommers: Cow<'a, Vec<Header>>,
+    withdrawals: Option<Cow<'a, Withdrawals>>,
+    sidecars: Option<Cow<'a, Vec<BlobTransactionSidecar>>>,
+    read_precompile_calls: Option<Cow<'a, ReadPrecompileCalls>>,
+    highest_precompile_address: Option<Cow<'a, Address>>,
+}
+
+#[derive(RlpEncodable, RlpDecodable)]
+#[rlp(trailing)]
+pub(crate) struct BlockHelper<'a> {
+    pub(crate) header: Cow<'a, Header>,
+    pub(crate) transactions: Cow<'a, Vec<TransactionSigned>>,
+    pub(crate) ommers: Cow<'a, Vec<Header>>,
+    pub(crate) withdrawals: Option<Cow<'a, Withdrawals>>,
+    pub(crate) sidecars: Option<Cow<'a, Vec<BlobTransactionSidecar>>>,
+    pub(crate) read_precompile_calls: Option<Cow<'a, ReadPrecompileCalls>>,
+    pub(crate) highest_precompile_address: Option<Cow<'a, Address>>,
+}
+
+impl<'a> From<&'a HlBlockBody> for BlockBodyHelper<'a> {
+    fn from(value: &'a HlBlockBody) -> Self {
+        let HlBlockBody {
+            inner: BlockBody { transactions, ommers, withdrawals },
+            sidecars,
+            read_precompile_calls,
+            highest_precompile_address,
+        } = value;
+        Self {
+            transactions: Cow::Borrowed(transactions),
+            ommers: Cow::Borrowed(ommers),
+            withdrawals: withdrawals.as_ref().map(Cow::Borrowed),
+            sidecars: sidecars.as_ref().map(Cow::Borrowed),
+            read_precompile_calls: read_precompile_calls.as_ref().map(Cow::Borrowed),
+            highest_precompile_address: highest_precompile_address.as_ref().map(Cow::Borrowed),
+        }
+    }
+}
+
+impl<'a> From<&'a HlBlock> for BlockHelper<'a> {
+    fn from(value: &'a HlBlock) -> Self {
+        let HlBlock {
+            header,
+            body:
+                HlBlockBody {
+                    inner: BlockBody { transactions, ommers, withdrawals },
+                    sidecars,
+                    read_precompile_calls,
+                    highest_precompile_address,
+                },
+        } = value;
+        Self {
+            header: Cow::Borrowed(header),
+            transactions: Cow::Borrowed(transactions),
+            ommers: Cow::Borrowed(ommers),
+            withdrawals: withdrawals.as_ref().map(Cow::Borrowed),
+            sidecars: sidecars.as_ref().map(Cow::Borrowed),
+            read_precompile_calls: read_precompile_calls.as_ref().map(Cow::Borrowed),
+            highest_precompile_address: highest_precompile_address.as_ref().map(Cow::Borrowed),
+        }
+    }
+}
+
+impl Encodable for HlBlockBody {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        BlockBodyHelper::from(self).encode(out);
+    }
+    fn length(&self) -> usize {
+        BlockBodyHelper::from(self).length()
+    }
+}
+
+impl Decodable for HlBlockBody {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let BlockBodyHelper {
+            transactions,
+            ommers,
+            withdrawals,
+            sidecars,
+            read_precompile_calls,
+            highest_precompile_address,
+        } = BlockBodyHelper::decode(buf)?;
+        Ok(Self {
+            inner: BlockBody {
+                transactions: transactions.into_owned(),
+                ommers: ommers.into_owned(),
+                withdrawals: withdrawals.map(|w| w.into_owned()),
+            },
+            sidecars: sidecars.map(|s| s.into_owned()),
+            read_precompile_calls: read_precompile_calls.map(|s| s.into_owned()),
+            highest_precompile_address: highest_precompile_address.map(|s| s.into_owned()),
+        })
+    }
+}
+
+impl Encodable for HlBlock {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        BlockHelper::from(self).encode(out);
+    }
+    fn length(&self) -> usize {
+        BlockHelper::from(self).length()
+    }
+}
+
+impl Decodable for HlBlock {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let BlockHelper {
+            header,
+            transactions,
+            ommers,
+            withdrawals,
+            sidecars,
+            read_precompile_calls,
+            highest_precompile_address,
+        } = BlockHelper::decode(buf)?;
+        Ok(Self {
+            header: header.into_owned(),
+            body: HlBlockBody {
+                inner: BlockBody {
+                    transactions: transactions.into_owned(),
+                    ommers: ommers.into_owned(),
+                    withdrawals: withdrawals.map(|w| w.into_owned()),
+                },
+                sidecars: sidecars.map(|s| s.into_owned()),
+                read_precompile_calls: read_precompile_calls.map(|s| s.into_owned()),
+                highest_precompile_address: highest_precompile_address.map(|s| s.into_owned()),
+            },
+        })
+    }
+}

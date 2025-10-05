@@ -1,7 +1,7 @@
 use crate::{
     HlBlock, HlBlockBody, HlPrimitives,
     node::{
-        primitives::tx_wrapper::{convert_to_eth_block_body, convert_to_hl_block_body},
+        primitives::transaction::{convert_to_eth_block_body, convert_to_hl_block_body},
         types::HlExtras,
     },
 };
