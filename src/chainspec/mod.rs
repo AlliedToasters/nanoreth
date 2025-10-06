@@ -1,7 +1,7 @@
 pub mod hl;
 pub mod parser;
 
-use crate::{hardforks::HlHardforks, node::primitives::HlHeader};
+use crate::{hardforks::HlHardforks, node::primitives::{header::HlHeaderExtras, HlHeader}};
 use alloy_eips::eip7840::BlobParams;
 use alloy_genesis::Genesis;
 use alloy_primitives::{Address, B256, U256};
@@ -127,14 +127,10 @@ impl HlChainSpec {
             _ => unreachable!("Unreachable since ChainSpecParser won't return other chains"),
         }
     }
-    
+
     fn new(inner: ChainSpec) -> Self {
-        let genesis_header = HlHeader {
-            inner: inner.genesis_header().clone(),
-            logs_bloom_with_system_txs: Default::default(),
-            system_tx_count: 0,
-            read_precompile_calls: Default::default(),
-        };
+        let genesis_header =
+            HlHeader { inner: inner.genesis_header().clone(), extras: HlHeaderExtras::default() };
         Self { inner, genesis_header }
     }
 }

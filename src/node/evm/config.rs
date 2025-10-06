@@ -1,11 +1,15 @@
 use super::{executor::HlBlockExecutor, factory::HlEvmFactory};
 use crate::{
-    chainspec::HlChainSpec, evm::{spec::HlSpecId, transaction::HlTxEnv}, hardforks::HlHardforks, node::{
+    HlBlock, HlBlockBody, HlHeader, HlPrimitives,
+    chainspec::HlChainSpec,
+    evm::{spec::HlSpecId, transaction::HlTxEnv},
+    hardforks::HlHardforks,
+    node::{
         evm::{executor::is_system_transaction, receipt_builder::RethReceiptBuilder},
         primitives::{BlockBody, TransactionSigned},
         rpc::engine_api::validator::HlExecutionData,
         types::HlExtras,
-    }, HlBlock, HlBlockBody, HlHeader, HlPrimitives
+    },
 };
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header, Transaction as _, TxReceipt};
 use alloy_eips::{Encodable2718, merge::BEACON_NONCE};
@@ -132,7 +136,9 @@ where
             excess_blob_gas,
             requests_hash,
         };
-        let header = HlHeader::from_ethereum_header(header, receipts);
+        let system_tx_count =
+            transactions.iter().filter(|t| is_system_transaction(t)).count() as u64;
+        let header = HlHeader::from_ethereum_header(header, receipts, system_tx_count);
 
         Ok(Self::Block {
             header,

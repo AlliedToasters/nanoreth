@@ -7,35 +7,11 @@ use alloy_primitives::keccak256;
 use revm::{
     context::Host,
     interpreter::{
-        InstructionContext, InterpreterTypes, as_u64_saturated, interpreter_types::StackTr,
+        _count, InstructionContext, InterpreterTypes, as_u64_saturated, interpreter_types::StackTr,
         popn_top,
     },
     primitives::{BLOCK_HASH_HISTORY, U256},
 };
-
-#[doc(hidden)]
-#[macro_export]
-#[collapse_debuginfo(yes)]
-macro_rules! _count {
-    (@count) => { 0 };
-    (@count $head:tt $($tail:tt)*) => { 1 + _count!(@count $($tail)*) };
-    ($($arg:tt)*) => { _count!(@count $($arg)*) };
-}
-
-/// Pops n values from the stack and returns the top value. Fails the instruction if n values can't
-/// be popped.
-#[macro_export]
-#[collapse_debuginfo(yes)]
-macro_rules! popn_top {
-    ([ $($x:ident),* ], $top:ident, $interpreter:expr $(,$ret:expr)? ) => {
-        // Workaround for https://github.com/rust-lang/rust/issues/144329.
-        if $interpreter.stack.len() < (1 + $crate::_count!($($x)*)) {
-            $interpreter.halt_underflow();
-            return $($ret)?;
-        }
-        let ([$( $x ),*], $top) = unsafe { $interpreter.stack.popn_top().unwrap_unchecked() };
-    };
-}
 
 /// Implements the BLOCKHASH instruction.
 ///

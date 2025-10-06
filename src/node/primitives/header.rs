@@ -9,8 +9,6 @@ use reth_primitives_traits::{BlockHeader, InMemorySize, serde_bincode_compat::Rl
 use reth_rpc_convert::transaction::FromConsensusHeader;
 use serde::{Deserialize, Serialize};
 
-use crate::node::types::HlExtras;
-
 /// The header type of this node
 ///
 /// This type extends the regular ethereum header with an extension.
@@ -33,22 +31,25 @@ pub struct HlHeader {
     /// The regular eth header
     #[as_ref]
     #[deref]
-    #[serde(flatten)]
     pub inner: Header,
     /// The extended header fields that is not part of the block hash
+    pub extras: HlHeaderExtras,
+}
+
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, RlpEncodable, RlpDecodable, Hash,
+)]
+pub struct HlHeaderExtras {
     pub logs_bloom_with_system_txs: Bloom,
     pub system_tx_count: u64,
-    pub read_precompile_calls: HlExtras,
 }
+
 impl HlHeader {
-    pub(crate) fn from_ethereum_header(header: Header, receipts: &[EthereumReceipt]) -> HlHeader {
+    pub(crate) fn from_ethereum_header(header: Header, receipts: &[EthereumReceipt], system_tx_count: u64) -> HlHeader {
         let logs_bloom = logs_bloom(receipts.iter().flat_map(|r| &r.logs));
-        let system_tx_count = receipts.iter().filter(|r| r.cumulative_gas_used == 0).count() as u64;
         HlHeader {
             inner: header,
-            logs_bloom_with_system_txs: logs_bloom,
-            system_tx_count,
-            read_precompile_calls: Default::default(),
+            extras: HlHeaderExtras { logs_bloom_with_system_txs: logs_bloom, system_tx_count },
         }
     }
 }
@@ -101,7 +102,7 @@ impl alloy_consensus::BlockHeader for HlHeader {
     }
 
     fn logs_bloom(&self) -> Bloom {
-        self.inner.logs_bloom()
+        self.extras.logs_bloom_with_system_txs
     }
 
     fn difficulty(&self) -> U256 {
@@ -155,14 +156,21 @@ impl alloy_consensus::BlockHeader for HlHeader {
     fn extra_data(&self) -> &Bytes {
         self.inner.extra_data()
     }
+
+    fn is_empty(&self) -> bool {
+        self.extras.system_tx_count == 0 && self.inner.is_empty()
+    }
 }
 
 impl InMemorySize for HlHeader {
     fn size(&self) -> usize {
-        self.inner.size()
-            + self.logs_bloom_with_system_txs.data().len()
-            + self.system_tx_count.size()
-            + self.read_precompile_calls.size()
+        self.inner.size() + self.extras.size()
+    }
+}
+
+impl InMemorySize for HlHeaderExtras {
+    fn size(&self) -> usize {
+        self.logs_bloom_with_system_txs.data().len() + self.system_tx_count.size()
     }
 }
 
@@ -171,15 +179,20 @@ impl reth_codecs::Compact for HlHeader {
     where
         B: alloy_rlp::bytes::BufMut + AsMut<[u8]>,
     {
-        // It's too tedious to implement to_compact for every field, so use rmp_serde to serialize
-        // This also helps the struct to be upgradable in future thanks to serde's flexibility.
+        // Because Header ends with extra_data which is `Bytes`, we can't use to_compact for extras,
+        // because Compact trait requires the Bytes field to be placed at the end of the struct.
+        // Bytes::from_compact just reads all trailing data as the Bytes field.
+        //
+        // Hence we need to use other form of serialization, since extra headers are not Compact-compatible.
+        // We just treat all header fields as rmp-serialized one `Bytes` field.
         let result: Bytes = rmp_serde::to_vec(&self).unwrap().into();
         result.to_compact(buf)
     }
 
-    fn from_compact(buf: &[u8], identifier: usize) -> (Self, &[u8]) {
-        let header: HlHeader = rmp_serde::from_slice(&buf[identifier..]).unwrap();
-        (header, &buf[identifier + buf.len()..])
+    fn from_compact(buf: &[u8], len: usize) -> (Self, &[u8]) {
+        let (bytes, remaining) = Bytes::from_compact(buf, len);
+        let header: HlHeader = rmp_serde::from_slice(&bytes).unwrap();
+        (header, remaining)
     }
 }
 

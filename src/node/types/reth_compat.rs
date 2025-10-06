@@ -120,6 +120,11 @@ impl SealedBlock {
         let mut merged_txs = vec![];
         merged_txs.extend(system_txs.iter().map(|tx| system_tx_to_reth_transaction(tx, chain_id)));
         merged_txs.extend(self.body.transactions.iter().map(|tx| tx.to_reth_transaction()));
+
+        let mut merged_receipts = vec![];
+        merged_receipts.extend(system_txs.iter().map(|tx| tx.receipt.clone().unwrap().into()));
+        merged_receipts.extend(receipts.into_iter().map(From::from));
+
         let block_body = HlBlockBody {
             inner: reth_primitives::BlockBody {
                 transactions: merged_txs,
@@ -131,10 +136,12 @@ impl SealedBlock {
             highest_precompile_address,
         };
 
+        let system_tx_count = system_txs.len() as u64;
         HlBlock {
             header: HlHeader::from_ethereum_header(
                 self.header.header.clone(),
-                &receipts.into_iter().map(From::from).collect::<Vec<_>>(),
+                &merged_receipts,
+                system_tx_count,
             ),
             body: block_body,
         }

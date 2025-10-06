@@ -1,21 +1,21 @@
 //! Copy of reth codebase.
 
+use crate::HlBlock;
 use alloy_consensus::{BlockHeader, TxReceipt, proofs::calculate_receipt_root};
 use alloy_eips::eip7685::Requests;
 use alloy_primitives::{B256, Bloom};
 use reth::consensus::ConsensusError;
 use reth_chainspec::EthereumHardforks;
 use reth_primitives::{GotExpected, RecoveredBlock, gas_spent_by_transactions};
-use reth_primitives_traits::{Block, Receipt as ReceiptTrait};
+use reth_primitives_traits::Receipt as ReceiptTrait;
 
-pub fn validate_block_post_execution<B, R, ChainSpec>(
-    block: &RecoveredBlock<B>,
+pub fn validate_block_post_execution<R, ChainSpec>(
+    block: &RecoveredBlock<HlBlock>,
     chain_spec: &ChainSpec,
     receipts: &[R],
     requests: &Requests,
 ) -> Result<(), ConsensusError>
 where
-    B: Block,
     R: ReceiptTrait,
     ChainSpec: EthereumHardforks,
 {
@@ -42,7 +42,7 @@ where
             receipts.iter().filter(|&r| r.cumulative_gas_used() != 0).cloned().collect::<Vec<_>>();
         if let Err(error) = verify_receipts(
             block.header().receipts_root(),
-            block.header().logs_bloom(),
+            block.header().inner.logs_bloom(),
             &receipts_for_root,
         ) {
             tracing::debug!(%error, ?receipts, "receipts verification failed");
