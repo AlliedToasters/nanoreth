@@ -2,12 +2,12 @@ use reth_ethereum_primitives::Receipt;
 use reth_primitives::NodePrimitives;
 
 pub mod transaction;
-pub use transaction::{BlockBody, TransactionSigned};
+pub use transaction::TransactionSigned;
 
 pub mod block;
 pub use block::HlBlock;
 pub mod body;
-pub use body::HlBlockBody;
+pub use body::{BlockBody, HlBlockBody};
 pub mod header;
 pub use header::HlHeader;
 

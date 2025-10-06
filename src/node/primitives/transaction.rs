@@ -2,7 +2,7 @@
 //! except that it supports pseudo signer for system transactions.
 use std::convert::Infallible;
 
-use crate::{evm::transaction::HlTxEnv, HlHeader};
+use crate::evm::transaction::HlTxEnv;
 use alloy_consensus::{
     SignableTransaction, Signed, Transaction as TransactionTrait, TransactionEnvelope, TxEip1559,
     TxEip2930, TxEip4844, TxEip7702, TxLegacy, TxType, TypedTransaction, crypto::RecoveryError,
@@ -180,8 +180,6 @@ impl SerdeBincodeCompat for TransactionSigned {
         repr.0
     }
 }
-
-pub type BlockBody = alloy_consensus::BlockBody<TransactionSigned, HlHeader>;
 
 impl TryFrom<TransactionSigned> for PooledTransactionVariant {
     type Error = <InnerType as TryInto<PooledTransactionVariant>>::Error;

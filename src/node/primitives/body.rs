@@ -3,8 +3,8 @@ use alloy_primitives::Address;
 use reth_primitives_traits::{BlockBody as BlockBodyTrait, InMemorySize};
 use serde::{Deserialize, Serialize};
 
-use crate::node::primitives::{BlockBody, TransactionSigned};
-pub use crate::node::types::{ReadPrecompileCall, ReadPrecompileCalls};
+use crate::node::types::{ReadPrecompileCall, ReadPrecompileCalls};
+use crate::{HlHeader, node::primitives::TransactionSigned};
 
 /// Block body for HL. It is equivalent to Ethereum [`BlockBody`] but additionally stores sidecars
 /// for blob transactions.
@@ -29,13 +29,17 @@ pub struct HlBlockBody {
     pub highest_precompile_address: Option<Address>,
 }
 
+pub type BlockBody = alloy_consensus::BlockBody<TransactionSigned, HlHeader>;
+
 impl InMemorySize for HlBlockBody {
     fn size(&self) -> usize {
-        self.inner.size() +
-            self.sidecars
+        self.inner.size()
+            + self
+                .sidecars
                 .as_ref()
-                .map_or(0, |s| s.capacity() * core::mem::size_of::<BlobTransactionSidecar>()) +
-            self.read_precompile_calls
+                .map_or(0, |s| s.capacity() * core::mem::size_of::<BlobTransactionSidecar>())
+            + self
+                .read_precompile_calls
                 .as_ref()
                 .map_or(0, |s| s.0.capacity() * core::mem::size_of::<ReadPrecompileCall>())
     }
