@@ -1,7 +1,7 @@
 #![allow(clippy::owned_cow)]
 use super::{HlBlock, HlBlockBody, TransactionSigned};
-use crate::node::types::ReadPrecompileCalls;
-use alloy_consensus::{BlobTransactionSidecar, BlockBody, Header};
+use crate::{node::types::ReadPrecompileCalls, HlHeader};
+use alloy_consensus::{BlobTransactionSidecar, BlockBody};
 use alloy_eips::eip4895::Withdrawals;
 use alloy_primitives::Address;
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
@@ -11,7 +11,7 @@ use std::borrow::Cow;
 #[rlp(trailing)]
 struct BlockBodyHelper<'a> {
     transactions: Cow<'a, Vec<TransactionSigned>>,
-    ommers: Cow<'a, Vec<Header>>,
+    ommers: Cow<'a, Vec<HlHeader>>,
     withdrawals: Option<Cow<'a, Withdrawals>>,
     sidecars: Option<Cow<'a, Vec<BlobTransactionSidecar>>>,
     read_precompile_calls: Option<Cow<'a, ReadPrecompileCalls>>,
@@ -21,9 +21,9 @@ struct BlockBodyHelper<'a> {
 #[derive(RlpEncodable, RlpDecodable)]
 #[rlp(trailing)]
 pub(crate) struct BlockHelper<'a> {
-    pub(crate) header: Cow<'a, Header>,
+    pub(crate) header: Cow<'a, HlHeader>,
     pub(crate) transactions: Cow<'a, Vec<TransactionSigned>>,
-    pub(crate) ommers: Cow<'a, Vec<Header>>,
+    pub(crate) ommers: Cow<'a, Vec<HlHeader>>,
     pub(crate) withdrawals: Option<Cow<'a, Withdrawals>>,
     pub(crate) sidecars: Option<Cow<'a, Vec<BlobTransactionSidecar>>>,
     pub(crate) read_precompile_calls: Option<Cow<'a, ReadPrecompileCalls>>,
@@ -95,7 +95,7 @@ impl Decodable for HlBlockBody {
         Ok(Self {
             inner: BlockBody {
                 transactions: transactions.into_owned(),
-                ommers: ommers.into_owned(),
+                ommers: ommers.into_owned().into_iter().map(Into::into).collect(),
                 withdrawals: withdrawals.map(|w| w.into_owned()),
             },
             sidecars: sidecars.map(|s| s.into_owned()),

@@ -1,5 +1,5 @@
 use crate::{
-    HlBlock, HlBlockBody, HlPrimitives,
+    HlBlock, HlBlockBody, HlHeader, HlPrimitives,
     node::{
         primitives::transaction::{convert_to_eth_block_body, convert_to_hl_block_body},
         types::HlExtras,
@@ -13,6 +13,8 @@ use reth_db::{
     cursor::{DbCursorRO, DbCursorRW},
     transaction::{DbTx, DbTxMut},
 };
+use reth_primitives::TransactionSigned;
+use reth_primitives_traits::Block;
 use reth_provider::{
     BlockBodyReader, BlockBodyWriter, ChainSpecProvider, ChainStorageReader, ChainStorageWriter,
     DBProvider, DatabaseProvider, EthStorage, ProviderResult, ReadBodyInput, StorageLocation,
@@ -23,7 +25,7 @@ pub mod tables;
 
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
-pub struct HlStorage(EthStorage);
+pub struct HlStorage(EthStorage<TransactionSigned, HlHeader>);
 
 impl HlStorage {
     fn write_precompile_calls<Provider>(
@@ -146,15 +148,15 @@ where
         inputs: Vec<ReadBodyInput<'_, Self::Block>>,
     ) -> ProviderResult<Vec<HlBlockBody>> {
         let read_precompile_calls = self.read_precompile_calls(provider, &inputs)?;
-        let eth_bodies = self.0.read_block_bodies(
-            provider,
-            inputs
-                .into_iter()
-                .map(|(header, transactions)| {
-                    (header, transactions.into_iter().map(|tx| tx.into_inner()).collect())
-                })
-                .collect(),
-        )?;
+        let inputs: Vec<(&HlHeader, _)> = inputs
+            .into_iter()
+            .map(|(header, transactions)| {
+                (header, transactions.into_iter().map(|tx| tx.into_inner()).collect())
+            })
+            .collect();
+        let inputs: Vec<(&<Self::Block as Block>::Header, _)> = inputs;
+        let eth_bodies = self.0.read_block_bodies(provider, inputs)?;
+        let eth_bodies: Vec<alloy_consensus::BlockBody<_, HlHeader>> = eth_bodies;
 
         // NOTE: sidecars are not used in HyperEVM yet.
         Ok(eth_bodies

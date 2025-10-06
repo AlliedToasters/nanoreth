@@ -38,10 +38,10 @@ pub struct HlNewBlock(pub NewBlock<HlBlock>);
 mod rlp {
     use super::*;
     use crate::{
-        HlBlockBody,
+        HlBlockBody, HlHeader,
         node::primitives::{BlockBody, TransactionSigned},
     };
-    use alloy_consensus::{BlobTransactionSidecar, Header};
+    use alloy_consensus::BlobTransactionSidecar;
     use alloy_primitives::{Address, U128};
     use alloy_rlp::{RlpDecodable, RlpEncodable};
     use alloy_rpc_types::Withdrawals;
@@ -50,9 +50,9 @@ mod rlp {
     #[derive(RlpEncodable, RlpDecodable)]
     #[rlp(trailing)]
     struct BlockHelper<'a> {
-        header: Cow<'a, Header>,
+        header: Cow<'a, HlHeader>,
         transactions: Cow<'a, Vec<TransactionSigned>>,
-        ommers: Cow<'a, Vec<Header>>,
+        ommers: Cow<'a, Vec<HlHeader>>,
         withdrawals: Option<Cow<'a, Withdrawals>>,
     }
 

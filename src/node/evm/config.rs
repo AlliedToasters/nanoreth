@@ -1,15 +1,11 @@
 use super::{executor::HlBlockExecutor, factory::HlEvmFactory};
 use crate::{
-    HlBlock, HlBlockBody, HlPrimitives,
-    chainspec::HlChainSpec,
-    evm::{spec::HlSpecId, transaction::HlTxEnv},
-    hardforks::HlHardforks,
-    node::{
+    chainspec::HlChainSpec, evm::{spec::HlSpecId, transaction::HlTxEnv}, hardforks::HlHardforks, node::{
         evm::{executor::is_system_transaction, receipt_builder::RethReceiptBuilder},
         primitives::{BlockBody, TransactionSigned},
         rpc::engine_api::validator::HlExecutionData,
         types::HlExtras,
-    },
+    }, HlBlock, HlBlockBody, HlHeader, HlPrimitives
 };
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header, Transaction as _, TxReceipt};
 use alloy_eips::{Encodable2718, merge::BEACON_NONCE};
@@ -54,7 +50,7 @@ where
 
     fn assemble_block(
         &self,
-        input: BlockAssemblerInput<'_, '_, F>,
+        input: BlockAssemblerInput<'_, '_, F, HlHeader>,
     ) -> Result<Self::Block, BlockExecutionError> {
         // TODO: Copy of EthBlockAssembler::assemble_block
         let inner = &self.inner;
@@ -136,6 +132,7 @@ where
             excess_blob_gas,
             requests_hash,
         };
+        let header = HlHeader::from_ethereum_header(header, receipts);
 
         Ok(Self::Block {
             header,
@@ -269,6 +266,8 @@ where
     }
 }
 
+static EMPTY_OMMERS: [Header; 0] = [];
+
 impl ConfigureEvm for HlEvmConfig
 where
     Self: Send + Sync + Unpin + Clone + 'static,
@@ -287,7 +286,7 @@ where
         self
     }
 
-    fn evm_env(&self, header: &Header) -> Result<EvmEnv<HlSpecId>, Self::Error> {
+    fn evm_env(&self, header: &HlHeader) -> Result<EvmEnv<HlSpecId>, Self::Error> {
         let blob_params = self.chain_spec().blob_params_at_timestamp(header.timestamp);
         let spec = revm_spec_by_timestamp_and_block_number(
             self.chain_spec().clone(),
@@ -332,7 +331,7 @@ where
 
     fn next_evm_env(
         &self,
-        parent: &Header,
+        parent: &HlHeader,
         attributes: &Self::NextBlockEnvCtx,
     ) -> Result<EvmEnv<HlSpecId>, Self::Error> {
         // ensure we're not missing any timestamp based hardforks
@@ -382,7 +381,7 @@ where
             ctx: EthBlockExecutionCtx {
                 parent_hash: block.header().parent_hash,
                 parent_beacon_block_root: block.header().parent_beacon_block_root,
-                ommers: &block.body().ommers,
+                ommers: &EMPTY_OMMERS,
                 withdrawals: block.body().withdrawals.as_ref().map(Cow::Borrowed),
             },
             extras: HlExtras {
@@ -420,7 +419,7 @@ impl ConfigureEngineEvm<HlExecutionData> for HlEvmConfig {
             ctx: EthBlockExecutionCtx {
                 parent_hash: block.header.parent_hash,
                 parent_beacon_block_root: block.header.parent_beacon_block_root,
-                ommers: &block.body.ommers,
+                ommers: &EMPTY_OMMERS,
                 withdrawals: block.body.withdrawals.as_ref().map(Cow::Borrowed),
             },
             extras: HlExtras {

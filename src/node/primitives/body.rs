@@ -1,4 +1,4 @@
-use alloy_consensus::{BlobTransactionSidecar, Header};
+use alloy_consensus::BlobTransactionSidecar;
 use alloy_primitives::Address;
 use reth_primitives_traits::{BlockBody as BlockBodyTrait, InMemorySize};
 use serde::{Deserialize, Serialize};
@@ -43,7 +43,7 @@ impl InMemorySize for HlBlockBody {
 
 impl BlockBodyTrait for HlBlockBody {
     type Transaction = TransactionSigned;
-    type OmmerHeader = Header;
+    type OmmerHeader = super::HlHeader;
 
     fn transactions(&self) -> &[Self::Transaction] {
         BlockBodyTrait::transactions(&self.inner)

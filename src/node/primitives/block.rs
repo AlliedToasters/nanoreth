@@ -1,16 +1,13 @@
-use crate::node::primitives::HlBlockBody;
-use alloy_consensus::Header;
+use super::{HlBlockBody, HlHeader, rlp};
 use alloy_rlp::Encodable;
 use reth_primitives_traits::{Block, InMemorySize};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
-use crate::node::primitives::rlp;
-
 /// Block for HL
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HlBlock {
-    pub header: Header,
+    pub header: HlHeader,
     pub body: HlBlockBody,
 }
 
@@ -21,7 +18,7 @@ impl InMemorySize for HlBlock {
 }
 
 impl Block for HlBlock {
-    type Header = Header;
+    type Header = HlHeader;
     type Body = HlBlockBody;
 
     fn new(header: Self::Header, body: Self::Body) -> Self {

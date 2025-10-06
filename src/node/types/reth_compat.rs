@@ -10,11 +10,11 @@ use std::{
 use tracing::info;
 
 use crate::{
-    HlBlock, HlBlockBody,
+    HlBlock, HlBlockBody, HlHeader,
     node::{
         primitives::TransactionSigned as TxSigned,
         spot_meta::{SpotId, erc20_contract_to_spot_token},
-        types::{ReadPrecompileCalls, SystemTx},
+        types::{LegacyReceipt, ReadPrecompileCalls, SystemTx},
     },
 };
 
@@ -114,6 +114,7 @@ impl SealedBlock {
         read_precompile_calls: ReadPrecompileCalls,
         highest_precompile_address: Option<Address>,
         system_txs: Vec<super::SystemTx>,
+        receipts: Vec<LegacyReceipt>,
         chain_id: u64,
     ) -> HlBlock {
         let mut merged_txs = vec![];
@@ -123,13 +124,19 @@ impl SealedBlock {
             inner: reth_primitives::BlockBody {
                 transactions: merged_txs,
                 withdrawals: self.body.withdrawals.clone(),
-                ommers: self.body.ommers.clone(),
+                ommers: vec![],
             },
             sidecars: None,
             read_precompile_calls: Some(read_precompile_calls),
             highest_precompile_address,
         };
 
-        HlBlock { header: self.header.header.clone(), body: block_body }
+        HlBlock {
+            header: HlHeader::from_ethereum_header(
+                self.header.header.clone(),
+                &receipts.into_iter().map(From::from).collect::<Vec<_>>(),
+            ),
+            body: block_body,
+        }
     }
 }

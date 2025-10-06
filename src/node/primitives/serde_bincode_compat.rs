@@ -1,12 +1,12 @@
 #![allow(clippy::owned_cow)]
-use alloy_consensus::{BlobTransactionSidecar, Header};
+use alloy_consensus::BlobTransactionSidecar;
 use alloy_primitives::Address;
 use reth_primitives_traits::serde_bincode_compat::{BincodeReprFor, SerdeBincodeCompat};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 use super::{HlBlock, HlBlockBody};
-use crate::node::{primitives::BlockBody, types::ReadPrecompileCalls};
+use crate::{node::{primitives::BlockBody, types::ReadPrecompileCalls}, HlHeader};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HlBlockBodyBincode<'a> {
@@ -18,7 +18,7 @@ pub struct HlBlockBodyBincode<'a> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HlBlockBincode<'a> {
-    header: BincodeReprFor<'a, Header>,
+    header: BincodeReprFor<'a, HlHeader>,
     body: BincodeReprFor<'a, HlBlockBody>,
 }
 
@@ -59,6 +59,6 @@ impl SerdeBincodeCompat for HlBlock {
 
     fn from_repr(repr: Self::BincodeRepr<'_>) -> Self {
         let HlBlockBincode { header, body } = repr;
-        Self { header: Header::from_repr(header), body: HlBlockBody::from_repr(body) }
+        Self { header: HlHeader::from_repr(header), body: HlBlockBody::from_repr(body) }
     }
 }

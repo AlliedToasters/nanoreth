@@ -2,7 +2,7 @@
 //! except that it supports pseudo signer for system transactions.
 use std::convert::Infallible;
 
-use crate::evm::transaction::HlTxEnv;
+use crate::{evm::transaction::HlTxEnv, HlHeader};
 use alloy_consensus::{
     SignableTransaction, Signed, Transaction as TransactionTrait, TransactionEnvelope, TxEip1559,
     TxEip2930, TxEip4844, TxEip7702, TxLegacy, TxType, TypedTransaction, crypto::RecoveryError,
@@ -181,7 +181,7 @@ impl SerdeBincodeCompat for TransactionSigned {
     }
 }
 
-pub type BlockBody = alloy_consensus::BlockBody<TransactionSigned>;
+pub type BlockBody = alloy_consensus::BlockBody<TransactionSigned, HlHeader>;
 
 impl TryFrom<TransactionSigned> for PooledTransactionVariant {
     type Error = <InnerType as TryInto<PooledTransactionVariant>>::Error;
@@ -211,15 +211,15 @@ impl Decompress for TransactionSigned {
     }
 }
 
-pub fn convert_to_eth_block_body(value: BlockBody) -> alloy_consensus::BlockBody<InnerType> {
+pub fn convert_to_eth_block_body(value: BlockBody) -> alloy_consensus::BlockBody<InnerType, HlHeader> {
     alloy_consensus::BlockBody {
         transactions: value.transactions.into_iter().map(|tx| tx.into_inner()).collect(),
-        ommers: value.ommers,
+        ommers: value.ommers.into_iter().map(|ommer| ommer.into()).collect(),
         withdrawals: value.withdrawals,
     }
 }
 
-pub fn convert_to_hl_block_body(value: alloy_consensus::BlockBody<InnerType>) -> BlockBody {
+pub fn convert_to_hl_block_body(value: alloy_consensus::BlockBody<InnerType, HlHeader>) -> BlockBody {
     BlockBody {
         transactions: value.transactions.into_iter().map(TransactionSigned::Default).collect(),
         ommers: value.ommers,

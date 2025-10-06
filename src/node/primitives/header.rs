@@ -1,8 +1,12 @@
 use alloy_consensus::Header;
 use alloy_primitives::{Address, B64, B256, BlockNumber, Bloom, Bytes, Sealable, U256};
 use alloy_rlp::{RlpDecodable, RlpEncodable};
+use reth_cli_commands::common::CliHeader;
 use reth_codecs::Compact;
+use reth_ethereum_primitives::EthereumReceipt;
+use reth_primitives::{SealedHeader, logs_bloom};
 use reth_primitives_traits::{BlockHeader, InMemorySize, serde_bincode_compat::RlpBincode};
+use reth_rpc_convert::transaction::FromConsensusHeader;
 use serde::{Deserialize, Serialize};
 
 use crate::node::types::HlExtras;
@@ -35,6 +39,18 @@ pub struct HlHeader {
     pub logs_bloom_with_system_txs: Bloom,
     pub system_tx_count: u64,
     pub read_precompile_calls: HlExtras,
+}
+impl HlHeader {
+    pub(crate) fn from_ethereum_header(header: Header, receipts: &[EthereumReceipt]) -> HlHeader {
+        let logs_bloom = logs_bloom(receipts.iter().flat_map(|r| &r.logs));
+        let system_tx_count = receipts.iter().filter(|r| r.cumulative_gas_used == 0).count() as u64;
+        HlHeader {
+            inner: header,
+            logs_bloom_with_system_txs: logs_bloom,
+            system_tx_count,
+            read_precompile_calls: Default::default(),
+        }
+    }
 }
 
 impl From<Header> for HlHeader {
@@ -185,3 +201,28 @@ impl reth_db_api::table::Decompress for HlHeader {
 impl BlockHeader for HlHeader {}
 
 impl RlpBincode for HlHeader {}
+
+impl CliHeader for HlHeader {
+    fn set_number(&mut self, number: u64) {
+        self.inner.set_number(number);
+    }
+}
+
+impl From<HlHeader> for Header {
+    fn from(value: HlHeader) -> Self {
+        value.inner
+    }
+}
+
+pub fn to_ethereum_ommers(ommers: &[HlHeader]) -> Vec<Header> {
+    ommers.iter().map(|ommer| ommer.clone().into()).collect()
+}
+
+impl FromConsensusHeader<HlHeader> for alloy_rpc_types::Header {
+    fn from_consensus_header(header: SealedHeader<HlHeader>, block_size: usize) -> Self {
+        FromConsensusHeader::<Header>::from_consensus_header(
+            SealedHeader::<Header>::new(header.inner.clone(), header.hash()),
+            block_size,
+        )
+    }
+}

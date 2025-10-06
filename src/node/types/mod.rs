@@ -2,9 +2,11 @@
 //!
 //! Changes:
 //! - ReadPrecompileCalls supports RLP encoding / decoding
+use alloy_consensus::TxType;
 use alloy_primitives::{Address, B256, Bytes, Log};
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use bytes::BufMut;
+use reth_ethereum_primitives::EthereumReceipt;
 use reth_primitives_traits::InMemorySize;
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +69,7 @@ impl BlockAndReceipts {
             self.read_precompile_calls.clone(),
             self.highest_precompile_address,
             self.system_txs.clone(),
+            self.receipts.clone(),
             chain_id,
         )
     }
@@ -93,6 +96,23 @@ pub struct LegacyReceipt {
     success: bool,
     cumulative_gas_used: u64,
     logs: Vec<Log>,
+}
+
+impl From<LegacyReceipt> for EthereumReceipt {
+    fn from(r: LegacyReceipt) -> Self {
+        EthereumReceipt {
+            tx_type: match r.tx_type {
+                LegacyTxType::Legacy => TxType::Legacy,
+                LegacyTxType::Eip2930 => TxType::Eip2930,
+                LegacyTxType::Eip1559 => TxType::Eip1559,
+                LegacyTxType::Eip4844 => TxType::Eip4844,
+                LegacyTxType::Eip7702 => TxType::Eip7702,
+            },
+            success: r.success,
+            cumulative_gas_used: r.cumulative_gas_used,
+            logs: r.logs,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
