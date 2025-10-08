@@ -20,7 +20,7 @@ use reth_provider::{
     DatabaseProvider, ProviderFactory, ReceiptProvider, StaticFileProviderFactory,
     StaticFileSegment, StaticFileWriter,
 };
-use std::{marker::PhantomData, ops::RangeInclusive, path::PathBuf, sync::Arc};
+use std::{marker::PhantomData, path::PathBuf, sync::Arc};
 use tracing::{info, warn};
 
 use crate::{chainspec::HlChainSpec, HlHeader, HlPrimitives};
@@ -166,12 +166,7 @@ where
             let sf_provider = self.sf_provider();
             let sf_tmp_provider = StaticFileProvider::<HlPrimitives>::read_write(&conversion_tmp)?;
             let block_range_for_filename = sf_provider.find_fixed_range(block_range.start());
-            migrate_single_static_file(
-                &sf_tmp_provider,
-                &sf_provider,
-                &provider,
-                block_range,
-            )?;
+            migrate_single_static_file(&sf_tmp_provider, &sf_provider, &provider, block_range)?;
 
             self.move_static_files_for_segment(block_range_for_filename)?;
         }
@@ -253,30 +248,36 @@ fn migrate_single_static_file<N: NodeTypesForProvider<Primitives = HlPrimitives>
     provider: &DatabaseProvider<Tx<RO>, NodeTypesWithDBAdapter<N, Arc<DatabaseEnv>>>,
     block_range: SegmentRangeInclusive,
 ) -> Result<(), eyre::Error> {
-    let block_range: RangeInclusive<u64> = block_range.into();
-    info!("Migrating block range {:?}...", block_range);
-    info!("Loading headers");
-    let headers = old_headers_range(sf_in, block_range.clone())?;
-    info!("Loading receipts");
-    let receipts = provider.receipts_by_block_range(block_range.clone())?;
-    assert_eq!(headers.len(), receipts.len());
-    let mut writer = sf_out.get_writer(*block_range.start(), StaticFileSegment::Headers)?;
-    let new_headers = std::iter::zip(headers, receipts)
-        .map(|(header, receipts)| {
-            let system_tx_count = receipts.iter().filter(|r| r.cumulative_gas_used == 0).count();
-            let eth_header = Header::decompress(&header[0]).unwrap();
-            let hl_header =
-                HlHeader::from_ethereum_header(eth_header, &receipts, system_tx_count as u64);
+    info!("Migrating block range {}...", block_range);
 
-            let difficulty: U256 = CompactU256::decompress(&header[1]).unwrap().into();
-            let hash = BlockHash::decompress(&header[2]).unwrap();
-            (hl_header, difficulty, hash)
-        })
-        .collect::<Vec<_>>();
-    for header in new_headers {
-        writer.append_header(&header.0, header.1, &header.2)?;
+    // block_ranges into chunks of 100000 blocks
+    const CHUNK_SIZE: u64 = 100000;
+    for chunk in (0..=block_range.end()).step_by(CHUNK_SIZE as usize) {
+        let end = std::cmp::min(chunk + CHUNK_SIZE - 1, block_range.end());
+        let block_range = chunk..=end;
+        let headers = old_headers_range(sf_in, block_range.clone())?;
+        let receipts = provider.receipts_by_block_range(block_range.clone())?;
+        assert_eq!(headers.len(), receipts.len());
+        let mut writer = sf_out.get_writer(*block_range.start(), StaticFileSegment::Headers)?;
+        let new_headers = std::iter::zip(headers, receipts)
+            .map(|(header, receipts)| {
+                let system_tx_count =
+                    receipts.iter().filter(|r| r.cumulative_gas_used == 0).count();
+                let eth_header = Header::decompress(&header[0]).unwrap();
+                let hl_header =
+                    HlHeader::from_ethereum_header(eth_header, &receipts, system_tx_count as u64);
+
+                let difficulty: U256 = CompactU256::decompress(&header[1]).unwrap().into();
+                let hash = BlockHash::decompress(&header[2]).unwrap();
+                (hl_header, difficulty, hash)
+            })
+            .collect::<Vec<_>>();
+        for header in new_headers {
+            writer.append_header(&header.0, header.1, &header.2)?;
+        }
+        writer.commit().unwrap();
+        info!("Migrated block range {:?}...", block_range);
     }
-    writer.commit().unwrap();
     Ok(())
 }
 
