@@ -209,22 +209,6 @@ impl Decompress for TransactionSigned {
     }
 }
 
-pub fn convert_to_eth_block_body(value: BlockBody) -> alloy_consensus::BlockBody<InnerType, HlHeader> {
-    alloy_consensus::BlockBody {
-        transactions: value.transactions.into_iter().map(|tx| tx.into_inner()).collect(),
-        ommers: value.ommers.into_iter().map(|ommer| ommer.into()).collect(),
-        withdrawals: value.withdrawals,
-    }
-}
-
-pub fn convert_to_hl_block_body(value: alloy_consensus::BlockBody<InnerType, HlHeader>) -> BlockBody {
-    BlockBody {
-        transactions: value.transactions.into_iter().map(TransactionSigned::Default).collect(),
-        ommers: value.ommers,
-        withdrawals: value.withdrawals,
-    }
-}
-
 impl TryIntoSimTx<TransactionSigned> for TransactionRequest {
     fn try_into_sim_tx(self) -> Result<TransactionSigned, ValueError<Self>> {
         let tx = self

@@ -95,7 +95,7 @@ impl Decodable for HlBlockBody {
         Ok(Self {
             inner: BlockBody {
                 transactions: transactions.into_owned(),
-                ommers: ommers.into_owned().into_iter().map(Into::into).collect(),
+                ommers: ommers.into_owned(),
                 withdrawals: withdrawals.map(|w| w.into_owned()),
             },
             sidecars: sidecars.map(|s| s.into_owned()),

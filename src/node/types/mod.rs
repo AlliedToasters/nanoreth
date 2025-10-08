@@ -19,10 +19,7 @@ pub struct ReadPrecompileCalls(pub Vec<ReadPrecompileCall>);
 
 pub(crate) mod reth_compat;
 
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Default, RlpEncodable, RlpDecodable, Eq, PartialEq, Hash,
-)]
-#[rlp(trailing)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HlExtras {
     pub read_precompile_calls: Option<ReadPrecompileCalls>,
     pub highest_precompile_address: Option<Address>,
@@ -30,8 +27,8 @@ pub struct HlExtras {
 
 impl InMemorySize for HlExtras {
     fn size(&self) -> usize {
-        self.read_precompile_calls.as_ref().map_or(0, |s| s.0.len())
-            + self.highest_precompile_address.as_ref().map_or(0, |_| 20)
+        self.read_precompile_calls.as_ref().map_or(0, |s| s.0.len()) +
+            self.highest_precompile_address.as_ref().map_or(0, |_| 20)
     }
 }
 
