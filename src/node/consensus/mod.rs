@@ -1,5 +1,4 @@
-use crate::{HlBlock, HlBlockBody, HlPrimitives, hardforks::HlHardforks, node::HlNode};
-use alloy_consensus::Header;
+use crate::{hardforks::HlHardforks, node::{primitives::HlHeader, HlNode}, HlBlock, HlBlockBody, HlPrimitives};
 use reth::{
     api::{FullNodeTypes, NodeTypes},
     beacon_consensus::EthBeaconConsensus,
@@ -101,14 +100,14 @@ where
 
 impl<ChainSpec> Consensus<HlBlock> for HlConsensus<ChainSpec>
 where
-    ChainSpec: EthChainSpec<Header = Header> + HlHardforks,
+    ChainSpec: EthChainSpec<Header = HlHeader> + HlHardforks,
 {
     type Error = ConsensusError;
 
     fn validate_body_against_header(
         &self,
         body: &HlBlockBody,
-        header: &SealedHeader,
+        header: &SealedHeader<HlHeader>,
     ) -> Result<(), ConsensusError> {
         Consensus::<HlBlock>::validate_body_against_header(&self.inner, body, header)
     }
@@ -148,7 +147,7 @@ mod reth_copy;
 
 impl<ChainSpec> FullConsensus<HlPrimitives> for HlConsensus<ChainSpec>
 where
-    ChainSpec: EthChainSpec<Header = Header> + HlHardforks,
+    ChainSpec: EthChainSpec<Header = HlHeader> + HlHardforks,
 {
     fn validate_block_post_execution(
         &self,

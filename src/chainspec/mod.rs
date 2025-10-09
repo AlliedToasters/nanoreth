@@ -1,8 +1,7 @@
 pub mod hl;
 pub mod parser;
 
-use crate::hardforks::HlHardforks;
-use alloy_consensus::Header;
+use crate::{hardforks::HlHardforks, node::primitives::{header::HlHeaderExtras, HlHeader}};
 use alloy_eips::eip7840::BlobParams;
 use alloy_genesis::Genesis;
 use alloy_primitives::{Address, B256, U256};
@@ -20,10 +19,11 @@ pub const TESTNET_CHAIN_ID: u64 = 998;
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct HlChainSpec {
     pub inner: ChainSpec,
+    pub genesis_header: HlHeader,
 }
 
 impl EthChainSpec for HlChainSpec {
-    type Header = Header;
+    type Header = HlHeader;
 
     fn blob_params_at_timestamp(&self, timestamp: u64) -> Option<BlobParams> {
         self.inner.blob_params_at_timestamp(timestamp)
@@ -57,8 +57,8 @@ impl EthChainSpec for HlChainSpec {
         Box::new(self.inner.display_hardforks())
     }
 
-    fn genesis_header(&self) -> &Header {
-        self.inner.genesis_header()
+    fn genesis_header(&self) -> &HlHeader {
+        &self.genesis_header
     }
 
     fn genesis(&self) -> &Genesis {
@@ -126,5 +126,11 @@ impl HlChainSpec {
             TESTNET_CHAIN_ID => "hl-testnet-evm-blocks",
             _ => unreachable!("Unreachable since ChainSpecParser won't return other chains"),
         }
+    }
+
+    fn new(inner: ChainSpec) -> Self {
+        let genesis_header =
+            HlHeader { inner: inner.genesis_header().clone(), extras: HlHeaderExtras::default() };
+        Self { inner, genesis_header }
     }
 }

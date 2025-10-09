@@ -1,12 +1,15 @@
 use crate::{
     chainspec::{HlChainSpec, parser::HlChainSpecParser},
-    node::{HlNode, consensus::HlConsensus, evm::config::HlEvmConfig, storage::tables::Tables},
+    node::{
+        HlNode, consensus::HlConsensus, evm::config::HlEvmConfig, migrate::Migrator,
+        storage::tables::Tables,
+    },
     pseudo_peer::BlockSourceArgs,
 };
 use clap::{Args, Parser};
 use reth::{
     CliRunner,
-    args::LogArgs,
+    args::{DatabaseArgs, DatadirArgs, LogArgs},
     builder::{NodeBuilder, WithLaunchContext},
     cli::Commands,
     prometheus_exporter::install_prometheus_recorder,
@@ -142,6 +145,8 @@ where
 
         match self.command {
             Commands::Node(command) => runner.run_command_until_exit(|ctx| {
+                Self::migrate_db(&command.chain, &command.datadir, &command.db)
+                    .expect("Failed to migrate database");
                 command.execute(ctx, FnLauncher::new::<C, Ext>(launcher))
             }),
             Commands::Init(command) => {
@@ -186,6 +191,15 @@ where
         let db_path = data_dir.db();
         init_db(db_path.clone(), env.db.database_args())?;
         init_db_for::<_, Tables>(db_path, env.db.database_args())?;
+        Ok(())
+    }
+
+    fn migrate_db(
+        chain: &HlChainSpec,
+        datadir: &DatadirArgs,
+        db: &DatabaseArgs,
+    ) -> eyre::Result<()> {
+        Migrator::<HlNode>::new(chain.clone(), datadir.clone(), *db)?.migrate_db()?;
         Ok(())
     }
 }

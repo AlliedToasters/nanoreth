@@ -1,8 +1,6 @@
 use crate::{
-    HlBlock,
-    node::evm::config::{HlBlockExecutorFactory, HlEvmConfig},
+    node::evm::config::{HlBlockExecutorFactory, HlEvmConfig}, HlBlock, HlHeader
 };
-use alloy_consensus::Header;
 use reth_evm::{
     block::BlockExecutionError,
     execute::{BlockAssembler, BlockAssemblerInput},
@@ -13,7 +11,7 @@ impl BlockAssembler<HlBlockExecutorFactory> for HlEvmConfig {
 
     fn assemble_block(
         &self,
-        input: BlockAssemblerInput<'_, '_, HlBlockExecutorFactory, Header>,
+        input: BlockAssemblerInput<'_, '_, HlBlockExecutorFactory, HlHeader>,
     ) -> Result<Self::Block, BlockExecutionError> {
         let HlBlock { header, body } = self.block_assembler.assemble_block(input)?;
         Ok(HlBlock { header, body })

@@ -26,8 +26,8 @@ impl ChainSpecParser for HlChainSpecParser {
 /// Currently only mainnet is supported.
 pub fn chain_value_parser(s: &str) -> eyre::Result<Arc<HlChainSpec>> {
     match s {
-        "mainnet" => Ok(Arc::new(HlChainSpec { inner: hl_mainnet() })),
-        "testnet" => Ok(Arc::new(HlChainSpec { inner: hl_testnet() })),
+        "mainnet" => Ok(Arc::new(HlChainSpec::new(hl_mainnet()))),
+        "testnet" => Ok(Arc::new(HlChainSpec::new(hl_testnet()))),
         _ => Err(eyre::eyre!("Unsupported chain: {}", s)),
     }
 }

@@ -33,6 +33,7 @@ pub mod cli;
 pub mod consensus;
 pub mod engine;
 pub mod evm;
+pub mod migrate;
 pub mod network;
 pub mod primitives;
 pub mod rpc;

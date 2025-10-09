@@ -181,8 +181,6 @@ impl SerdeBincodeCompat for TransactionSigned {
     }
 }
 
-pub type BlockBody = alloy_consensus::BlockBody<TransactionSigned>;
-
 impl TryFrom<TransactionSigned> for PooledTransactionVariant {
     type Error = <InnerType as TryInto<PooledTransactionVariant>>::Error;
 
@@ -208,22 +206,6 @@ impl Compress for TransactionSigned {
 impl Decompress for TransactionSigned {
     fn decompress(value: &[u8]) -> Result<Self, DatabaseError> {
         Ok(Self::Default(InnerType::decompress(value)?))
-    }
-}
-
-pub fn convert_to_eth_block_body(value: BlockBody) -> alloy_consensus::BlockBody<InnerType> {
-    alloy_consensus::BlockBody {
-        transactions: value.transactions.into_iter().map(|tx| tx.into_inner()).collect(),
-        ommers: value.ommers,
-        withdrawals: value.withdrawals,
-    }
-}
-
-pub fn convert_to_hl_block_body(value: alloy_consensus::BlockBody<InnerType>) -> BlockBody {
-    BlockBody {
-        transactions: value.transactions.into_iter().map(TransactionSigned::Default).collect(),
-        ommers: value.ommers,
-        withdrawals: value.withdrawals,
     }
 }
 

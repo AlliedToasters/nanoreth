@@ -2,16 +2,19 @@
 //!
 //! Changes:
 //! - ReadPrecompileCalls supports RLP encoding / decoding
+use alloy_consensus::TxType;
 use alloy_primitives::{Address, B256, Bytes, Log};
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use bytes::BufMut;
+use reth_ethereum_primitives::EthereumReceipt;
+use reth_primitives_traits::InMemorySize;
 use serde::{Deserialize, Serialize};
 
 use crate::HlBlock;
 
 pub type ReadPrecompileCall = (Address, Vec<(ReadPrecompileInput, ReadPrecompileResult)>);
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Default, Hash)]
 pub struct ReadPrecompileCalls(pub Vec<ReadPrecompileCall>);
 
 pub(crate) mod reth_compat;
@@ -20,6 +23,13 @@ pub(crate) mod reth_compat;
 pub struct HlExtras {
     pub read_precompile_calls: Option<ReadPrecompileCalls>,
     pub highest_precompile_address: Option<Address>,
+}
+
+impl InMemorySize for HlExtras {
+    fn size(&self) -> usize {
+        self.read_precompile_calls.as_ref().map_or(0, |s| s.0.len()) +
+            self.highest_precompile_address.as_ref().map_or(0, |_| 20)
+    }
 }
 
 impl Encodable for ReadPrecompileCalls {
@@ -56,6 +66,7 @@ impl BlockAndReceipts {
             self.read_precompile_calls.clone(),
             self.highest_precompile_address,
             self.system_txs.clone(),
+            self.receipts.clone(),
             chain_id,
         )
     }
@@ -82,6 +93,23 @@ pub struct LegacyReceipt {
     success: bool,
     cumulative_gas_used: u64,
     logs: Vec<Log>,
+}
+
+impl From<LegacyReceipt> for EthereumReceipt {
+    fn from(r: LegacyReceipt) -> Self {
+        EthereumReceipt {
+            tx_type: match r.tx_type {
+                LegacyTxType::Legacy => TxType::Legacy,
+                LegacyTxType::Eip2930 => TxType::Eip2930,
+                LegacyTxType::Eip1559 => TxType::Eip1559,
+                LegacyTxType::Eip4844 => TxType::Eip4844,
+                LegacyTxType::Eip7702 => TxType::Eip7702,
+            },
+            success: r.success,
+            cumulative_gas_used: r.cumulative_gas_used,
+            logs: r.logs,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -117,7 +145,7 @@ pub struct ReadPrecompileInput {
     pub gas_limit: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub enum ReadPrecompileResult {
     Ok { gas_used: u64, bytes: Bytes },
     OutOfGas,

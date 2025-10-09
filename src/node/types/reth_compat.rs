@@ -10,11 +10,11 @@ use std::{
 use tracing::info;
 
 use crate::{
-    HlBlock, HlBlockBody,
+    HlBlock, HlBlockBody, HlHeader,
     node::{
         primitives::TransactionSigned as TxSigned,
         spot_meta::{SpotId, erc20_contract_to_spot_token},
-        types::{ReadPrecompileCalls, SystemTx},
+        types::{LegacyReceipt, ReadPrecompileCalls, SystemTx},
     },
 };
 
@@ -114,22 +114,36 @@ impl SealedBlock {
         read_precompile_calls: ReadPrecompileCalls,
         highest_precompile_address: Option<Address>,
         system_txs: Vec<super::SystemTx>,
+        receipts: Vec<LegacyReceipt>,
         chain_id: u64,
     ) -> HlBlock {
         let mut merged_txs = vec![];
         merged_txs.extend(system_txs.iter().map(|tx| system_tx_to_reth_transaction(tx, chain_id)));
         merged_txs.extend(self.body.transactions.iter().map(|tx| tx.to_reth_transaction()));
+
+        let mut merged_receipts = vec![];
+        merged_receipts.extend(system_txs.iter().map(|tx| tx.receipt.clone().unwrap().into()));
+        merged_receipts.extend(receipts.into_iter().map(From::from));
+
         let block_body = HlBlockBody {
             inner: reth_primitives::BlockBody {
                 transactions: merged_txs,
                 withdrawals: self.body.withdrawals.clone(),
-                ommers: self.body.ommers.clone(),
+                ommers: vec![],
             },
             sidecars: None,
             read_precompile_calls: Some(read_precompile_calls),
             highest_precompile_address,
         };
 
-        HlBlock { header: self.header.header.clone(), body: block_body }
+        let system_tx_count = system_txs.len() as u64;
+        HlBlock {
+            header: HlHeader::from_ethereum_header(
+                self.header.header.clone(),
+                &merged_receipts,
+                system_tx_count,
+            ),
+            body: block_body,
+        }
     }
 }

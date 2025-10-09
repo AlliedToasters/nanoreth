@@ -179,7 +179,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::chainspec::hl::hl_mainnet;
+    use crate::{chainspec::hl::hl_mainnet, HlHeader};
 
     use super::*;
     use alloy_primitives::{B256, U128};
@@ -355,7 +355,7 @@ mod tests {
     /// Creates a test block message
     fn create_test_block() -> NewBlockMessage<HlNewBlock> {
         let block = HlBlock {
-            header: Header::default(),
+            header: HlHeader::default(),
             body: HlBlockBody {
                 inner: BlockBody {
                     transactions: Vec::new(),
