@@ -130,7 +130,14 @@ impl<'a, N: HlNodeType> MigratorMdbx<'a, N> {
     fn migrate_mdbx_inner(&self) -> eyre::Result<()> {
         // There shouldn't be many headers in mdbx, but using file for safety
         info!("Old database detected, migrating mdbx...");
-        let tmp_path = self.0.conversion_tmp_dir().join("headers.rmp");
+        let conversion_tmp = self.0.conversion_tmp_dir();
+        let tmp_path = conversion_tmp.join("headers.rmp");
+
+        if conversion_tmp.exists() {
+            std::fs::remove_dir_all(&conversion_tmp)?;
+        }
+        std::fs::create_dir_all(&conversion_tmp)?;
+
         let count = self.export_old_headers(&tmp_path)?;
         self.import_new_headers(tmp_path, count)?;
         Ok(())
