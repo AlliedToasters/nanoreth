@@ -327,8 +327,8 @@ fn migrate_single_static_file<N: HlNodeType>(
 ) -> Result<(), eyre::Error> {
     info!("Migrating block range {}...", block_range);
 
-    // block_ranges into chunks of 100000 blocks
-    const CHUNK_SIZE: u64 = 100000;
+    // block_ranges into chunks of 10000 blocks
+    const CHUNK_SIZE: u64 = 10000;
     for chunk in (0..=block_range.end()).step_by(CHUNK_SIZE as usize) {
         let end = std::cmp::min(chunk + CHUNK_SIZE - 1, block_range.end());
         let block_range = chunk..=end;
