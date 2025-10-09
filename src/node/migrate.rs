@@ -1,5 +1,5 @@
 use alloy_consensus::Header;
-use alloy_primitives::{b256, hex::ToHexExt, BlockHash, Bytes, B256, U256};
+use alloy_primitives::{B256, BlockHash, Bytes, U256, b256, hex::ToHexExt};
 use reth::{
     api::NodeTypesWithDBAdapter,
     args::{DatabaseArgs, DatadirArgs},
@@ -7,11 +7,12 @@ use reth::{
 };
 use reth_chainspec::EthChainSpec;
 use reth_db::{
-    mdbx::{tx::Tx, RO},
+    DatabaseEnv,
+    mdbx::{RO, tx::Tx},
     models::CompactU256,
     static_file::iter_static_files,
     table::Decompress,
-    tables, DatabaseEnv,
+    tables,
 };
 use reth_db_api::{
     cursor::{DbCursorRO, DbCursorRW},
@@ -20,15 +21,15 @@ use reth_db_api::{
 use reth_errors::ProviderResult;
 use reth_ethereum_primitives::EthereumReceipt;
 use reth_provider::{
-    providers::{NodeTypesForProvider, StaticFileProvider},
-    static_file::SegmentRangeInclusive,
     DatabaseProvider, ProviderFactory, ReceiptProvider, StaticFileProviderFactory,
     StaticFileSegment, StaticFileWriter,
+    providers::{NodeTypesForProvider, StaticFileProvider},
+    static_file::SegmentRangeInclusive,
 };
 use std::{fs::File, io::Write, path::PathBuf, sync::Arc};
 use tracing::{info, warn};
 
-use crate::{chainspec::HlChainSpec, HlHeader, HlPrimitives};
+use crate::{HlHeader, HlPrimitives, chainspec::HlChainSpec};
 
 pub(crate) trait HlNodeType:
     NodeTypesForProvider<ChainSpec = HlChainSpec, Primitives = HlPrimitives>
@@ -123,6 +124,8 @@ impl<'a, N: HlNodeType> MigratorMdbx<'a, N> {
             return Ok(false);
         }
 
+        check_if_migration_enabled()?;
+
         self.migrate_mdbx_inner()?;
         Ok(true)
     }
@@ -177,6 +180,18 @@ impl<'a, N: HlNodeType> MigratorMdbx<'a, N> {
         db_env.commit()?;
         Ok(())
     }
+}
+
+fn check_if_migration_enabled() -> Result<(), eyre::Error> {
+    if !std::env::var("EXPERIMENTAL_MIGRATE_DB").is_ok() {
+        let err_msg = concat!(
+            "Detected an old database format but experimental database migration is currently disabled. ",
+            "To enable migration, set EXPERIMENTAL_MIGRATE_DB=1, or alternatively, resync your node (safest option)."
+        );
+        warn!("{}", err_msg);
+        return Err(eyre::eyre!("{}", err_msg));
+    }
+    Ok(())
 }
 
 struct MigrateStaticFiles<'a, N: HlNodeType>(&'a Migrator<N>);
@@ -255,8 +270,8 @@ impl<'a, N: HlNodeType> MigrateStaticFiles<'a, N> {
         let mut first = true;
 
         for (block_range, _tx_ranges) in all_static_files {
-            let migration_needed = self.using_old_header(block_range.start())? ||
-                self.using_old_header(block_range.end())?;
+            let migration_needed = self.using_old_header(block_range.start())?
+                || self.using_old_header(block_range.end())?;
             if !migration_needed {
                 // Create a placeholder symlink
                 self.create_placeholder(block_range)?;
@@ -264,6 +279,8 @@ impl<'a, N: HlNodeType> MigrateStaticFiles<'a, N> {
             }
 
             if first {
+                check_if_migration_enabled()?;
+
                 info!("Old database detected, migrating static files...");
                 first = false;
             }
