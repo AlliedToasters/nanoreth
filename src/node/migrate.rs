@@ -251,7 +251,6 @@ impl<'a, N: HlNodeType> MigrateStaticFiles<'a, N> {
         let mut all_static_files = iter_static_files(&old_path)?;
         let all_static_files =
             all_static_files.remove(&StaticFileSegment::Headers).unwrap_or_default();
-        let provider = self.0.provider_factory.provider()?;
 
         let mut first = true;
 
@@ -271,6 +270,7 @@ impl<'a, N: HlNodeType> MigrateStaticFiles<'a, N> {
 
             let sf_provider = self.0.sf_provider();
             let sf_tmp_provider = StaticFileProvider::<HlPrimitives>::read_write(&conversion_tmp)?;
+            let provider = self.0.provider_factory.provider()?;
             let block_range_for_filename = sf_provider.find_fixed_range(block_range.start());
             migrate_single_static_file(&sf_tmp_provider, &sf_provider, &provider, block_range)?;
 
@@ -327,8 +327,8 @@ fn migrate_single_static_file<N: HlNodeType>(
 ) -> Result<(), eyre::Error> {
     info!("Migrating block range {}...", block_range);
 
-    // block_ranges into chunks of 10000 blocks
-    const CHUNK_SIZE: u64 = 10000;
+    // block_ranges into chunks of 50000 blocks
+    const CHUNK_SIZE: u64 = 50000;
     for chunk in (0..=block_range.end()).step_by(CHUNK_SIZE as usize) {
         let end = std::cmp::min(chunk + CHUNK_SIZE - 1, block_range.end());
         let block_range = chunk..=end;
