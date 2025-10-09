@@ -183,7 +183,7 @@ impl<'a, N: HlNodeType> MigratorMdbx<'a, N> {
 }
 
 fn check_if_migration_enabled() -> Result<(), eyre::Error> {
-    if !std::env::var("EXPERIMENTAL_MIGRATE_DB").is_ok() {
+    if std::env::var("EXPERIMENTAL_MIGRATE_DB").is_err() {
         let err_msg = concat!(
             "Detected an old database format but experimental database migration is currently disabled. ",
             "To enable migration, set EXPERIMENTAL_MIGRATE_DB=1, or alternatively, resync your node (safest option)."
