@@ -19,62 +19,23 @@ use alloy_rpc_types::{
     TransactionInfo,
     pubsub::{Params, SubscriptionKind},
 };
-use jsonrpsee::{PendingSubscriptionSink, SubscriptionMessage, SubscriptionSink, proc_macros::rpc};
+use jsonrpsee::{PendingSubscriptionSink, proc_macros::rpc};
 use jsonrpsee_core::{RpcResult, async_trait};
 use jsonrpsee_types::{ErrorObject, error::INTERNAL_ERROR_CODE};
 use reth::{api::FullNodeComponents, builder::rpc::RpcContext, tasks::TaskSpawner};
 use reth_primitives_traits::SignedTransaction;
 use reth_provider::{BlockIdReader, BlockReader, BlockReaderIdExt, ReceiptProvider};
-use reth_rpc::{EthFilter, EthPubSub, RpcTypes, eth::pubsub::SubscriptionSerializeError};
+use reth_rpc::{EthFilter, EthPubSub};
 use reth_rpc_eth_api::{
-    EthApiServer, EthApiTypes, EthFilterApiServer, EthPubSubApiServer, FullEthApiTypes, RpcBlock,
-    RpcConvert, RpcHeader, RpcNodeCoreExt, RpcReceipt, RpcTransaction, RpcTxReq,
-    helpers::{EthBlocks, EthTransactions, LoadReceipt},
-    transaction::ConvertReceiptInput,
+    EthApiTypes, EthFilterApiServer, EthPubSubApiServer, RpcBlock, RpcConvert, RpcReceipt,
+    RpcTransaction, helpers::EthBlocks, transaction::ConvertReceiptInput,
 };
 use reth_rpc_eth_types::EthApiError;
-use serde::Serialize;
 use std::{marker::PhantomData, sync::Arc};
-use tokio_stream::{Stream, StreamExt};
+use tokio_stream::StreamExt;
 use tracing::{Instrument, trace};
 
-use crate::{HlBlock, node::primitives::HlPrimitives};
-
-pub trait EthWrapper:
-    EthApiServer<
-        RpcTxReq<Self::NetworkTypes>,
-        RpcTransaction<Self::NetworkTypes>,
-        RpcBlock<Self::NetworkTypes>,
-        RpcReceipt<Self::NetworkTypes>,
-        RpcHeader<Self::NetworkTypes>,
-    > + FullEthApiTypes<
-        Primitives = HlPrimitives,
-        NetworkTypes: RpcTypes<TransactionResponse = alloy_rpc_types_eth::Transaction>,
-    > + RpcNodeCoreExt<Provider: BlockReader<Block = HlBlock>>
-    + EthBlocks
-    + EthTransactions
-    + LoadReceipt
-    + 'static
-{
-}
-
-impl<T> EthWrapper for T where
-    T: EthApiServer<
-            RpcTxReq<Self::NetworkTypes>,
-            RpcTransaction<Self::NetworkTypes>,
-            RpcBlock<Self::NetworkTypes>,
-            RpcReceipt<Self::NetworkTypes>,
-            RpcHeader<Self::NetworkTypes>,
-        > + FullEthApiTypes<
-            Primitives = HlPrimitives,
-            NetworkTypes: RpcTypes<TransactionResponse = alloy_rpc_types_eth::Transaction>,
-        > + RpcNodeCoreExt<Provider: BlockReader<Block = HlBlock>>
-        + EthBlocks
-        + EthTransactions
-        + LoadReceipt
-        + 'static
-{
-}
+use crate::addons::utils::{EthWrapper, new_headers_stream, pipe_from_stream};
 
 #[rpc(server, namespace = "eth")]
 #[async_trait]
@@ -387,7 +348,7 @@ where
                 )
                 .await;
             } else {
-                let _ = pubsub.handle_accepted(sink, kind, params).await;
+                let _ = pipe_from_stream(sink, new_headers_stream::<Eth>(&provider)).await;
             }
         }));
         Ok(())
@@ -410,23 +371,6 @@ fn adjust_log<Eth: EthWrapper>(mut log: Log, provider: &Eth::Provider) -> Option
     log.transaction_index = Some(tx_idx - sys_tx_count);
     log.log_index = Some(log_idx - sys_log_count);
     Some(log)
-}
-
-async fn pipe_from_stream<T: Serialize, St: Stream<Item = T> + Unpin>(
-    sink: SubscriptionSink,
-    mut stream: St,
-) -> Result<(), ErrorObject<'static>> {
-    loop {
-        tokio::select! {
-            _ = sink.closed() => break Ok(()),
-            maybe_item = stream.next() => {
-                let Some(item) = maybe_item else { break Ok(()) };
-                let msg = SubscriptionMessage::new(sink.method_name(), sink.subscription_id(), &item)
-                    .map_err(SubscriptionSerializeError::from)?;
-                if sink.send(msg).await.is_err() { break Ok(()); }
-            }
-        }
-    }
 }
 
 pub struct HlNodeBlockFilterHttp<Eth: EthWrapper> {
