@@ -1,12 +1,16 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use reth::builder::{NodeBuilder, NodeHandle, WithLaunchContext};
+use reth::{
+    builder::{NodeBuilder, NodeHandle, WithLaunchContext},
+    rpc::{api::EthPubSubApiServer, eth::RpcNodeCore},
+};
 use reth_db::DatabaseEnv;
 use reth_hl::{
     addons::{
         call_forwarder::{self, CallForwarderApiServer},
         hl_node_compliance::install_hl_node_compliance,
+        subscribe_fixup::SubscribeFixup,
         tx_forwarder::{self, EthForwarderApiServer},
     },
     chainspec::{HlChainSpec, parser::HlChainSpecParser},
@@ -68,6 +72,17 @@ fn main() -> eyre::Result<()> {
                         ctx.modules.remove_method_from_configured("eth_getProof");
                         info!("eth_getProof is disabled by default");
                     }
+
+                    // This is a temporary workaround to fix the issue with custom headers
+                    // affects `eth_subscribe[type=newHeads]`
+                    ctx.modules.replace_configured(
+                        SubscribeFixup::new(
+                            Arc::new(ctx.registry.eth_handlers().pubsub.clone()),
+                            Arc::new(ctx.registry.eth_api().provider().clone()),
+                            Box::new(ctx.node().task_executor.clone()),
+                        )
+                        .into_rpc(),
+                    )?;
 
                     ctx.modules.merge_configured(
                         HlBlockPrecompileExt::new(ctx.registry.eth_api().clone()).into_rpc(),
