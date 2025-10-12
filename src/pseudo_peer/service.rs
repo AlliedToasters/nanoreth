@@ -81,13 +81,13 @@ impl BlockPoller {
             .await
             .ok_or(eyre::eyre!("Failed to find latest block number"))?;
 
-        if let Some(debug_cutoff_height) = debug_cutoff_height &&
-            next_block_number > debug_cutoff_height
-        {
-            next_block_number = debug_cutoff_height;
-        }
-
         loop {
+            if let Some(debug_cutoff_height) = debug_cutoff_height
+                && next_block_number > debug_cutoff_height
+            {
+                next_block_number = debug_cutoff_height;
+            }
+
             match block_source.collect_block(next_block_number).await {
                 Ok(block) => {
                     block_tx.send((next_block_number, block)).await?;
