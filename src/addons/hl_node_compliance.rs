@@ -347,8 +347,10 @@ where
                     pubsub.log_stream(filter).filter_map(|log| adjust_log::<Eth>(log, &provider)),
                 )
                 .await;
-            } else {
+            } else if kind == SubscriptionKind::NewHeads {
                 let _ = pipe_from_stream(sink, new_headers_stream::<Eth>(&provider)).await;
+            } else {
+                let _ = pubsub.handle_accepted(sink, kind, params).await;
             }
         }));
         Ok(())
