@@ -63,16 +63,6 @@ fn main() -> eyre::Result<()> {
                         info!("Call/gas estimation will be forwarded to {}", upstream_rpc_url);
                     }
 
-                    if ext.hl_node_compliant {
-                        install_hl_node_compliance(&mut ctx)?;
-                        info!("hl-node compliant mode enabled");
-                    }
-
-                    if !ext.experimental_eth_get_proof {
-                        ctx.modules.remove_method_from_configured("eth_getProof");
-                        info!("eth_getProof is disabled by default");
-                    }
-
                     // This is a temporary workaround to fix the issue with custom headers
                     // affects `eth_subscribe[type=newHeads]`
                     ctx.modules.replace_configured(
@@ -83,6 +73,16 @@ fn main() -> eyre::Result<()> {
                         )
                         .into_rpc(),
                     )?;
+
+                    if ext.hl_node_compliant {
+                        install_hl_node_compliance(&mut ctx)?;
+                        info!("hl-node compliant mode enabled");
+                    }
+
+                    if !ext.experimental_eth_get_proof {
+                        ctx.modules.remove_method_from_configured("eth_getProof");
+                        info!("eth_getProof is disabled by default");
+                    }
 
                     ctx.modules.merge_configured(
                         HlBlockPrecompileExt::new(ctx.registry.eth_api().clone()).into_rpc(),
