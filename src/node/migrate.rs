@@ -346,7 +346,7 @@ fn migrate_single_static_file<N: HlNodeType>(
 
     // block_ranges into chunks of 50000 blocks
     const CHUNK_SIZE: u64 = 50000;
-    for chunk in (0..=block_range.end()).step_by(CHUNK_SIZE as usize) {
+    for chunk in (block_range.start()..=block_range.end()).step_by(CHUNK_SIZE as usize) {
         let end = std::cmp::min(chunk + CHUNK_SIZE - 1, block_range.end());
         let block_range = chunk..=end;
         let headers = old_headers_range(sf_in, block_range.clone())?;
