@@ -117,6 +117,9 @@ impl SealedBlock {
         receipts: Vec<LegacyReceipt>,
         chain_id: u64,
     ) -> HlBlock {
+        // NOTE: Filter out system transactions that may be rejected by the EVM (tracked by #97, testnet only).
+        let system_txs: Vec<_> = system_txs.into_iter().filter(|tx| tx.gas_limit() != 0).collect();
+
         let mut merged_txs = vec![];
         merged_txs.extend(system_txs.iter().map(|tx| system_tx_to_reth_transaction(tx, chain_id)));
         merged_txs.extend(self.body.transactions.iter().map(|tx| tx.to_reth_transaction()));

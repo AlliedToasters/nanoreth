@@ -127,6 +127,19 @@ pub struct SystemTx {
     pub receipt: Option<LegacyReceipt>,
 }
 
+impl SystemTx {
+    pub fn gas_limit(&self) -> u64 {
+        use reth_compat::Transaction;
+        match &self.tx {
+            Transaction::Legacy(tx) => tx.gas_limit,
+            Transaction::Eip2930(tx) => tx.gas_limit,
+            Transaction::Eip1559(tx) => tx.gas_limit,
+            Transaction::Eip4844(tx) => tx.gas_limit,
+            Transaction::Eip7702(tx) => tx.gas_limit,
+        }
+    }
+}
+
 #[derive(
     Debug,
     Clone,
