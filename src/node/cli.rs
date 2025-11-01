@@ -145,8 +145,12 @@ where
 
         match self.command {
             Commands::Node(command) => runner.run_command_until_exit(|ctx| {
-                Self::migrate_db(&command.chain, &command.datadir, &command.db)
-                    .expect("Failed to migrate database");
+                // NOTE: This is for one time migration around Oct 10 upgrade:
+                // It's not necessary anymore, an environment variable gate is added here.
+                if std::env::var("CHECK_DB_MIGRATION").is_ok() {
+                    Self::migrate_db(&command.chain, &command.datadir, &command.db)
+                        .expect("Failed to migrate database");
+                }
                 command.execute(ctx, FnLauncher::new::<C, Ext>(launcher))
             }),
             Commands::Init(command) => {
