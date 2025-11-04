@@ -1,4 +1,5 @@
 //! Copy of reth codebase to preserve serialization compatibility
+use crate::chainspec::TESTNET_CHAIN_ID;
 use alloy_consensus::{Header, Signed, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy};
 use alloy_primitives::{Address, BlockHash, Signature, TxKind, U256};
 use reth_primitives::TransactionSigned as RethTxSigned;
@@ -113,12 +114,15 @@ impl SealedBlock {
         &self,
         read_precompile_calls: ReadPrecompileCalls,
         highest_precompile_address: Option<Address>,
-        system_txs: Vec<super::SystemTx>,
+        mut system_txs: Vec<super::SystemTx>,
         receipts: Vec<LegacyReceipt>,
         chain_id: u64,
     ) -> HlBlock {
-        // NOTE: Filter out system transactions that may be rejected by the EVM (tracked by #97, testnet only).
-        let system_txs: Vec<_> = system_txs.into_iter().filter(|tx| tx.gas_limit() != 0).collect();
+        // NOTE: Filter out system transactions that may be rejected by the EVM (tracked by #97,
+        // testnet only).
+        if chain_id == TESTNET_CHAIN_ID {
+            system_txs = system_txs.into_iter().filter(|tx| tx.receipt.is_some()).collect();
+        }
 
         let mut merged_txs = vec![];
         merged_txs.extend(system_txs.iter().map(|tx| system_tx_to_reth_transaction(tx, chain_id)));
