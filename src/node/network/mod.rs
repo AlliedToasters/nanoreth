@@ -25,7 +25,10 @@ use reth_network::{NetworkConfig, NetworkHandle, NetworkManager};
 use reth_network_api::PeersInfo;
 use reth_provider::StageCheckpointReader;
 use reth_stages_types::StageId;
-use std::sync::Arc;
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tracing::info;
 
@@ -144,6 +147,8 @@ pub struct HlNetworkBuilder {
     pub(crate) block_source_config: BlockSourceConfig,
 
     pub(crate) debug_cutoff_height: Option<u64>,
+
+    pub(crate) allow_network_overrides: bool,
 }
 
 impl HlNetworkBuilder {
@@ -174,15 +179,24 @@ impl HlNetworkBuilder {
             ImportService::new(consensus, handle, from_network, to_network).await.unwrap();
         });
 
-        Ok(ctx.build_network_config(
-            ctx.network_config_builder()?
+        let mut config_builder = ctx.network_config_builder()?;
+
+        // Only apply localhost-only network settings if network overrides are NOT allowed
+        if !self.allow_network_overrides {
+            config_builder = config_builder
+                .discovery_addr(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0))
+                .listener_addr(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0))
                 .disable_dns_discovery()
-                .disable_nat()
-                .boot_nodes(boot_nodes())
-                .set_head(ctx.head())
-                .with_pow()
-                .block_import(Box::new(HlBlockImport::new(handle))),
-        ))
+                .disable_nat();
+        }
+
+        config_builder = config_builder
+            .boot_nodes(boot_nodes())
+            .set_head(ctx.head())
+            .with_pow()
+            .block_import(Box::new(HlBlockImport::new(handle)));
+
+        Ok(ctx.build_network_config(config_builder))
     }
 }
 

@@ -39,8 +39,11 @@ fn main() -> eyre::Result<()> {
          ext: HlNodeArgs| async move {
             let default_upstream_rpc_url = builder.config().chain.official_rpc_url();
 
-            let (node, engine_handle_tx) =
-                HlNode::new(ext.block_source_args.parse().await?, ext.debug_cutoff_height);
+            let (node, engine_handle_tx) = HlNode::new(
+                ext.block_source_args.parse().await?,
+                ext.debug_cutoff_height,
+                ext.allow_network_overrides,
+            );
             let NodeHandle { node, node_exit_future: exit_future } = builder
                 .node(node)
                 .extend_rpc_modules(move |mut ctx| {

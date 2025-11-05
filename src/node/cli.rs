@@ -82,6 +82,13 @@ pub struct HlNodeArgs {
     /// * Refers to the Merkle trie used for eth_getProof and state root, not actual state values.
     #[arg(long, env = "EXPERIMENTAL_ETH_GET_PROOF")]
     pub experimental_eth_get_proof: bool,
+
+    /// Allow network configuration overrides from CLI.
+    ///
+    /// When enabled, network settings (discovery_addr, listener_addr, dns_discovery, nat)
+    /// will be taken from CLI arguments instead of being hardcoded to localhost-only defaults.
+    #[arg(long, env = "ALLOW_NETWORK_OVERRIDES")]
+    pub allow_network_overrides: bool,
 }
 
 /// The main reth_hl cli interface.
