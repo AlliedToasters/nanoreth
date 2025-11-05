@@ -19,6 +19,9 @@ pub struct ReadPrecompileCalls(pub Vec<ReadPrecompileCall>);
 
 pub(crate) mod reth_compat;
 
+// Re-export spot metadata functions
+pub use reth_compat::{initialize_spot_metadata_cache, set_spot_metadata_db};
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HlExtras {
     pub read_precompile_calls: Option<ReadPrecompileCalls>,

@@ -2,7 +2,7 @@ use crate::{
     chainspec::{HlChainSpec, parser::HlChainSpecParser},
     node::{
         HlNode, consensus::HlConsensus, evm::config::HlEvmConfig, migrate::Migrator,
-        storage::tables::Tables,
+        spot_meta::init as spot_meta_init, storage::tables::Tables,
     },
     pseudo_peer::BlockSourceArgs,
 };
@@ -201,7 +201,12 @@ where
         let data_dir = env.datadir.clone().resolve_datadir(env.chain.chain());
         let db_path = data_dir.db();
         init_db(db_path.clone(), env.db.database_args())?;
-        init_db_for::<_, Tables>(db_path, env.db.database_args())?;
+        init_db_for::<_, Tables>(db_path.clone(), env.db.database_args())?;
+
+        // Initialize spot metadata in database
+        let chain_id = env.chain.chain().id();
+        spot_meta_init::init_spot_metadata(db_path, env.db.database_args(), chain_id)?;
+
         Ok(())
     }
 
