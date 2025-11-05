@@ -1,7 +1,10 @@
 pub mod hl;
 pub mod parser;
 
-use crate::{hardforks::HlHardforks, node::primitives::{header::HlHeaderExtras, HlHeader}};
+use crate::{
+    hardforks::HlHardforks,
+    node::primitives::{HlHeader, header::HlHeaderExtras},
+};
 use alloy_eips::eip7840::BlobParams;
 use alloy_genesis::Genesis;
 use alloy_primitives::{Address, B256, U256};

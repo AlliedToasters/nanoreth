@@ -45,7 +45,11 @@ pub struct HlHeaderExtras {
 }
 
 impl HlHeader {
-    pub(crate) fn from_ethereum_header(header: Header, receipts: &[EthereumReceipt], system_tx_count: u64) -> HlHeader {
+    pub(crate) fn from_ethereum_header(
+        header: Header,
+        receipts: &[EthereumReceipt],
+        system_tx_count: u64,
+    ) -> HlHeader {
         let logs_bloom = logs_bloom(receipts.iter().flat_map(|r| &r.logs));
         HlHeader {
             inner: header,
@@ -183,8 +187,9 @@ impl reth_codecs::Compact for HlHeader {
         // because Compact trait requires the Bytes field to be placed at the end of the struct.
         // Bytes::from_compact just reads all trailing data as the Bytes field.
         //
-        // Hence we need to use other form of serialization, since extra headers are not Compact-compatible.
-        // We just treat all header fields as rmp-serialized one `Bytes` field.
+        // Hence we need to use other form of serialization, since extra headers are not
+        // Compact-compatible. We just treat all header fields as rmp-serialized one `Bytes`
+        // field.
         let result: Bytes = rmp_serde::to_vec(&self).unwrap().into();
         result.to_compact(buf)
     }

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use crate::chainspec::{MAINNET_CHAIN_ID, TESTNET_CHAIN_ID};
 
+pub mod init;
 mod patch;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,7 +26,7 @@ pub struct SpotMeta {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct SpotId {
+pub struct SpotId {
     pub index: u64,
 }
 

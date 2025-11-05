@@ -1,4 +1,8 @@
-use crate::{hardforks::HlHardforks, node::{primitives::HlHeader, HlNode}, HlBlock, HlBlockBody, HlPrimitives};
+use crate::{
+    HlBlock, HlBlockBody, HlPrimitives,
+    hardforks::HlHardforks,
+    node::{HlNode, primitives::HlHeader},
+};
 use reth::{
     api::{FullNodeTypes, NodeTypes},
     beacon_consensus::EthBeaconConsensus,

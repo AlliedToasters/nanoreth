@@ -18,7 +18,9 @@ use reth_hl::{
         HlNode,
         cli::{Cli, HlNodeArgs},
         rpc::precompile::{HlBlockPrecompileApiServer, HlBlockPrecompileExt},
+        spot_meta::init as spot_meta_init,
         storage::tables::Tables,
+        types::set_spot_metadata_db,
     },
 };
 use tracing::info;
@@ -95,6 +97,16 @@ fn main() -> eyre::Result<()> {
                 })
                 .apply(|mut builder| {
                     builder.db_mut().create_tables_for::<Tables>().expect("create tables");
+
+                    let chain_id = builder.config().chain.inner.chain().id();
+                    let db = builder.db_mut().clone();
+
+                    // Set database handle for on-demand persistence
+                    set_spot_metadata_db(db.clone());
+
+                    // Load spot metadata from database and initialize cache
+                    spot_meta_init::load_spot_metadata_cache(&db, chain_id);
+
                     builder
                 })
                 .launch()

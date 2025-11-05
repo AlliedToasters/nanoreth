@@ -179,7 +179,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{chainspec::hl::hl_mainnet, HlHeader};
+    use crate::{HlHeader, chainspec::hl::hl_mainnet};
 
     use super::*;
     use alloy_primitives::{B256, U128};

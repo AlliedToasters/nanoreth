@@ -270,8 +270,8 @@ impl<'a, N: HlNodeType> MigrateStaticFiles<'a, N> {
         let mut first = true;
 
         for (block_range, _tx_ranges) in all_static_files {
-            let migration_needed = self.using_old_header(block_range.start())?
-                || self.using_old_header(block_range.end())?;
+            let migration_needed = self.using_old_header(block_range.start())? ||
+                self.using_old_header(block_range.end())?;
             if !migration_needed {
                 // Create a placeholder symlink
                 self.create_placeholder(block_range)?;

@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 use super::{HlBlock, HlBlockBody};
-use crate::{node::{primitives::BlockBody, types::ReadPrecompileCalls}, HlHeader};
+use crate::{
+    HlHeader,
+    node::{primitives::BlockBody, types::ReadPrecompileCalls},
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HlBlockBodyBincode<'a> {

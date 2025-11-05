@@ -1,5 +1,6 @@
 use crate::{
-    node::evm::config::{HlBlockExecutorFactory, HlEvmConfig}, HlBlock, HlHeader
+    HlBlock, HlHeader,
+    node::evm::config::{HlBlockExecutorFactory, HlEvmConfig},
 };
 use reth_evm::{
     block::BlockExecutionError,

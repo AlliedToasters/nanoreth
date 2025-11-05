@@ -1,11 +1,14 @@
 //! Copy of reth codebase to preserve serialization compatibility
+use crate::node::storage::tables::{SPOT_METADATA_KEY, SpotMetadata};
 use alloy_consensus::{Header, Signed, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy};
-use alloy_primitives::{Address, BlockHash, Signature, TxKind, U256};
+use alloy_primitives::{Address, BlockHash, Bytes, Signature, TxKind, U256};
+use reth_db::{DatabaseEnv, DatabaseError, cursor::DbCursorRW};
+use reth_db_api::{Database, transaction::DbTxMut};
 use reth_primitives::TransactionSigned as RethTxSigned;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    sync::{Arc, LazyLock, RwLock},
+    sync::{Arc, LazyLock, Mutex, RwLock},
 };
 use tracing::info;
 
@@ -81,31 +84,79 @@ pub struct SealedBlock {
     pub body: BlockBody,
 }
 
-fn system_tx_to_reth_transaction(transaction: &SystemTx, chain_id: u64) -> TxSigned {
-    static EVM_MAP: LazyLock<Arc<RwLock<BTreeMap<Address, SpotId>>>> =
-        LazyLock::new(|| Arc::new(RwLock::new(BTreeMap::new())));
-    {
-        let Transaction::Legacy(tx) = &transaction.tx else {
-            panic!("Unexpected transaction type");
-        };
-        let TxKind::Call(to) = tx.to else {
-            panic!("Unexpected contract creation");
-        };
-        let s = if tx.input.is_empty() {
-            U256::from(0x1)
-        } else {
-            loop {
-                if let Some(spot) = EVM_MAP.read().unwrap().get(&to) {
-                    break spot.to_s();
-                }
+static SPOT_EVM_MAP: LazyLock<Arc<RwLock<BTreeMap<Address, SpotId>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(BTreeMap::new())));
 
-                info!("Contract not found: {to:?} from spot mapping, fetching again...");
-                *EVM_MAP.write().unwrap() = erc20_contract_to_spot_token(chain_id).unwrap();
-            }
-        };
-        let signature = Signature::new(U256::from(0x1), s, true);
-        TxSigned::Default(RethTxSigned::Legacy(Signed::new_unhashed(tx.clone(), signature)))
+// Optional database handle for persisting on-demand fetches
+static DB_HANDLE: LazyLock<Mutex<Option<Arc<DatabaseEnv>>>> = LazyLock::new(|| Mutex::new(None));
+
+/// Set the database handle for persisting spot metadata
+pub fn set_spot_metadata_db(db: Arc<DatabaseEnv>) {
+    *DB_HANDLE.lock().unwrap() = Some(db);
+}
+
+/// Initialize the spot metadata cache with data loaded from database.
+/// This should be called during node initialization.
+pub fn initialize_spot_metadata_cache(metadata: BTreeMap<Address, SpotId>) {
+    *SPOT_EVM_MAP.write().unwrap() = metadata;
+}
+
+/// Helper function to serialize and store spot metadata to database
+pub fn store_spot_metadata(
+    db: &Arc<DatabaseEnv>,
+    metadata: &BTreeMap<Address, SpotId>,
+) -> Result<(), DatabaseError> {
+    db.update(|tx| {
+        let mut cursor = tx.cursor_write::<SpotMetadata>()?;
+
+        // Serialize to BTreeMap<Address, u64>
+        let serializable_map: BTreeMap<Address, u64> =
+            metadata.iter().map(|(addr, spot)| (*addr, spot.index)).collect();
+
+        cursor.upsert(
+            SPOT_METADATA_KEY,
+            &Bytes::from(
+                rmp_serde::to_vec(&serializable_map).expect("Failed to serialize spot metadata"),
+            ),
+        )?;
+        Ok(())
+    })?
+}
+
+/// Persist spot metadata to database if handle is available
+fn persist_spot_metadata_to_db(metadata: &BTreeMap<Address, SpotId>) {
+    if let Some(db) = DB_HANDLE.lock().unwrap().as_ref() {
+        match store_spot_metadata(db, metadata) {
+            Ok(_) => info!("Persisted spot metadata to database"),
+            Err(e) => info!("Failed to persist spot metadata to database: {}", e),
+        }
     }
+}
+
+fn system_tx_to_reth_transaction(transaction: &SystemTx, chain_id: u64) -> TxSigned {
+    let Transaction::Legacy(tx) = &transaction.tx else {
+        panic!("Unexpected transaction type");
+    };
+    let TxKind::Call(to) = tx.to else {
+        panic!("Unexpected contract creation");
+    };
+    let s = if tx.input.is_empty() {
+        U256::from(0x1)
+    } else {
+        loop {
+            if let Some(spot) = SPOT_EVM_MAP.read().unwrap().get(&to) {
+                break spot.to_s();
+            }
+
+            // Cache miss - fetch from API, update cache, and persist to database
+            info!("Contract not found: {to:?} from spot mapping, fetching from API...");
+            let metadata = erc20_contract_to_spot_token(chain_id).unwrap();
+            *SPOT_EVM_MAP.write().unwrap() = metadata.clone();
+            persist_spot_metadata_to_db(&metadata);
+        }
+    };
+    let signature = Signature::new(U256::from(0x1), s, true);
+    TxSigned::Default(RethTxSigned::Legacy(Signed::new_unhashed(tx.clone(), signature)))
 }
 
 impl SealedBlock {
