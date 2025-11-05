@@ -1,6 +1,6 @@
 #![allow(clippy::owned_cow)]
 use super::{HlBlock, HlBlockBody, TransactionSigned};
-use crate::{node::types::ReadPrecompileCalls, HlHeader};
+use crate::{HlHeader, node::types::ReadPrecompileCalls};
 use alloy_consensus::{BlobTransactionSidecar, BlockBody};
 use alloy_eips::eip4895::Withdrawals;
 use alloy_primitives::Address;
