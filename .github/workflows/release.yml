@@ -53,7 +53,7 @@ jobs:
           OUTDIR="dist"
           mkdir -p "$OUTDIR"
           BIN_PATH="target/$TARGET/release/${BIN_NAME}"
-          PKG_NAME="nanoreth-${VERSION}-${TARGET}.tar.gz"
+          PKG_NAME="nanoreth-${TARGET}.tar.gz"
           strip -s "$BIN_PATH" || true
           tar -C "target/$TARGET/release" -czf "$OUTDIR/$PKG_NAME" "$BIN_NAME"
           echo "PKG_PATH=$OUTDIR/$PKG_NAME" >> $GITHUB_ENV
