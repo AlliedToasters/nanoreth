@@ -72,8 +72,8 @@ impl BlockSource for RpcBlockSource {
         let client = self.client.clone();
         let metrics = self.metrics.clone();
         async move {
-            const BATCH_SIZE: usize = 100;
-            const MAX_CONCURRENT_BATCHES: usize = 10;
+            const BATCH_SIZE: usize = 200;
+            const MAX_CONCURRENT_BATCHES: usize = 20;
 
             let batches: Vec<Vec<u64>> =
                 heights.chunks(BATCH_SIZE).map(|c| c.to_vec()).collect();

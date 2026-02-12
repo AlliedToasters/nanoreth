@@ -69,7 +69,7 @@ impl HlSyncApiServer for HlSyncServer {
     }
 
     async fn sync_get_blocks(&self, heights: Vec<u64>) -> RpcResult<Bytes> {
-        const MAX_BATCH: usize = 100;
+        const MAX_BATCH: usize = 200;
         let heights = if heights.len() > MAX_BATCH { &heights[..MAX_BATCH] } else { &heights };
         trace!(target: "rpc::hl", count = heights.len(), "Serving hl_syncGetBlocks");
         let source = get_sync_block_source()?;
