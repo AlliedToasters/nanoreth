@@ -11,7 +11,7 @@ use reth_hl::{
         call_forwarder::{self, CallForwarderApiServer},
         hl_node_compliance::install_hl_node_compliance,
         subscribe_fixup::SubscribeFixup,
-        sync_server::{HlSyncApiServer, HlSyncServer},
+        sync_server::{HlSyncApiServer, HlSyncServer, ProviderSyncReader, set_sync_db_reader},
         tx_forwarder::{self, EthForwarderApiServer},
     },
     chainspec::{HlChainSpec, parser::HlChainSpecParser},
@@ -92,8 +92,10 @@ fn main() -> eyre::Result<()> {
                     }
 
                     if enable_sync_server {
+                        let provider = ctx.registry.eth_api().provider().clone();
+                        set_sync_db_reader(Box::new(ProviderSyncReader::new(provider)));
                         ctx.modules.merge_configured(HlSyncServer.into_rpc())?;
-                        info!("Sync server RPC enabled (hl_syncGetBlock, hl_syncLatestBlockNumber)");
+                        info!("Sync server RPC enabled (serving blocks from database)");
                     }
 
                     ctx.modules.merge_configured(

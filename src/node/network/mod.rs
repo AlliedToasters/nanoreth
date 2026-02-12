@@ -1,7 +1,6 @@
 #![allow(clippy::owned_cow)]
 use crate::{
     HlBlock,
-    addons::sync_server::set_sync_block_source,
     consensus::HlConsensus,
     node::{
         HlNode,
@@ -240,7 +239,6 @@ where
                 let block_source = block_source_config
                     .create_cached_block_source((*chain_spec).clone(), next_block_number)
                     .await;
-                set_sync_block_source(block_source.clone());
                 start_pseudo_peer(
                     chain_spec.clone(),
                     local_node_record.to_string(),
