@@ -4,14 +4,8 @@ use crate::node::{
     types::reth_compat,
 };
 use alloy_primitives::Address;
-use reth_db::{
-    DatabaseEnv,
-    cursor::DbCursorRO,
-};
-use reth_db_api::{
-    Database,
-    transaction::DbTx,
-};
+use reth_db::{DatabaseEnv, cursor::DbCursorRO};
+use reth_db_api::{Database, transaction::DbTx};
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::info;
 

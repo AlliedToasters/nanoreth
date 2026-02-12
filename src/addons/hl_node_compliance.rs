@@ -400,6 +400,10 @@ pub trait EthBlockApi<B: RpcObject, R: RpcObject> {
     #[method(name = "getBlockReceipts")]
     async fn block_receipts(&self, block_id: BlockId) -> RpcResult<Option<Vec<R>>>;
 
+    /// Returns all transaction receipts for a given block, including system transactions.
+    #[method(name = "getBlockReceiptsWithSystemTx")]
+    async fn block_receipts_with_system_tx(&self, block_id: BlockId) -> RpcResult<Option<Vec<R>>>;
+
     #[method(name = "getBlockTransactionCountByHash")]
     async fn block_transaction_count_by_hash(&self, hash: B256) -> RpcResult<Option<U256>>;
 
@@ -498,6 +502,55 @@ async fn adjust_block_receipts<Eth: EthWrapper>(
             .tx_resp_builder()
             .convert_receipts(inputs)
             .map(|receipts| Some((system_tx_count, receipts)));
+    }
+
+    Ok(None)
+}
+
+async fn block_receipts_with_system_txs<Eth: EthWrapper>(
+    block_id: BlockId,
+    eth_api: &Eth,
+) -> Result<Option<Vec<RpcReceipt<Eth::NetworkTypes>>>, Eth::Error> {
+    if let Some((block, receipts)) = EthBlocks::load_block_and_receipts(eth_api, block_id).await? {
+        let block_number = block.number;
+        let base_fee = block.base_fee_per_gas;
+        let block_hash = block.hash();
+        let excess_blob_gas = block.excess_blob_gas;
+        let timestamp = block.timestamp;
+        let mut gas_used = 0;
+        let mut next_log_index = 0;
+
+        let inputs = block
+            .transactions_recovered()
+            .zip(receipts.iter())
+            .enumerate()
+            .map(|(idx, (tx, receipt))| {
+                let meta = TransactionMeta {
+                    tx_hash: *tx.tx_hash(),
+                    index: idx as u64,
+                    block_hash,
+                    block_number,
+                    base_fee,
+                    excess_blob_gas,
+                    timestamp,
+                };
+
+                let input = ConvertReceiptInput {
+                    receipt: receipt.clone(),
+                    tx,
+                    gas_used: receipt.cumulative_gas_used() - gas_used,
+                    next_log_index,
+                    meta,
+                };
+
+                gas_used = receipt.cumulative_gas_used();
+                next_log_index += receipt.logs().len();
+
+                input
+            })
+            .collect::<Vec<_>>();
+
+        return eth_api.tx_resp_builder().convert_receipts(inputs).map(Some);
     }
 
     Ok(None)
@@ -607,6 +660,21 @@ where
         let result =
             adjust_block_receipts(block_id, &*self.eth_api).instrument(engine_span!()).await?;
         Ok(result.map(|(_, receipts)| receipts))
+    }
+
+    /// Handler for: `eth_getBlockReceiptsWithSystemTx`
+    async fn block_receipts_with_system_tx(
+        &self,
+        block_id: BlockId,
+    ) -> RpcResult<Option<Vec<RpcReceipt<Eth::NetworkTypes>>>> {
+        trace!(target: "rpc::eth", ?block_id, "Serving eth_getBlockReceiptsWithSystemTx");
+        if self.eth_api.provider().block_by_id(block_id).map_err(EthApiError::from)?.is_none() {
+            return Ok(None);
+        }
+        let result = block_receipts_with_system_txs(block_id, &*self.eth_api)
+            .instrument(engine_span!())
+            .await?;
+        Ok(result)
     }
 }
 
