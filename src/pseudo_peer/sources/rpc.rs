@@ -31,7 +31,7 @@ pub struct RpcBlockSourceMetrics {
 impl RpcBlockSource {
     pub fn new(url: String, polling_interval: Duration) -> Self {
         let client = HttpClientBuilder::default()
-            .request_timeout(Duration::from_secs(30))
+            .request_timeout(Duration::from_secs(120))
             .build(&url)
             .unwrap_or_else(|e| panic!("Failed to build RPC client for {url}: {e}"));
         info!("RPC block source connected to {url}");
@@ -72,7 +72,7 @@ impl BlockSource for RpcBlockSource {
         let client = self.client.clone();
         let metrics = self.metrics.clone();
         async move {
-            const BATCH_SIZE: usize = 200;
+            const BATCH_SIZE: usize = 500;
             const MAX_CONCURRENT_BATCHES: usize = 20;
 
             let batches: Vec<Vec<u64>> =
