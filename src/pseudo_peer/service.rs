@@ -9,7 +9,6 @@ use crate::{
 use alloy_eips::HashOrNumber;
 use alloy_primitives::{B256, U128};
 use alloy_rpc_types::Block;
-use futures::StreamExt as _;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use reth_eth_wire::{
@@ -152,21 +151,12 @@ impl<BS: BlockSource> PseudoPeer<BS> {
         }
     }
 
-    async fn collect_block(&self, height: u64) -> eyre::Result<BlockAndReceipts> {
-        self.block_source.collect_block(height).await
-    }
-
     async fn collect_blocks(
         &self,
         block_numbers: impl IntoIterator<Item = u64>,
     ) -> eyre::Result<Vec<BlockAndReceipts>> {
         let block_numbers = block_numbers.into_iter().collect::<Vec<_>>();
-        let res = futures::stream::iter(block_numbers)
-            .map(async |number| self.collect_block(number).await)
-            .buffered(self.block_source.recommended_chunk_size() as usize)
-            .collect::<Vec<_>>()
-            .await;
-        res.into_iter().collect()
+        self.block_source.collect_blocks(block_numbers).await
     }
 
     pub async fn process_eth_request(

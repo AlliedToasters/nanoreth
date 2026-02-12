@@ -1,7 +1,7 @@
 use super::BlockSource;
 use crate::node::types::BlockAndReceipts;
 use alloy_primitives::Bytes;
-use futures::{FutureExt, future::BoxFuture};
+use futures::{FutureExt, StreamExt, future::BoxFuture};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee_core::client::ClientT;
 use reth_metrics::{Metrics, metrics, metrics::Counter};
@@ -61,6 +61,49 @@ impl BlockSource for RpcBlockSource {
                 client.request("hl_syncLatestBlockNumber", Vec::<u64>::new()).await.ok()?;
             info!("Latest block number from remote: {:?}", result);
             result
+        }
+        .boxed()
+    }
+
+    fn collect_blocks(
+        &self,
+        heights: Vec<u64>,
+    ) -> BoxFuture<'static, eyre::Result<Vec<BlockAndReceipts>>> {
+        let client = self.client.clone();
+        let metrics = self.metrics.clone();
+        async move {
+            const BATCH_SIZE: usize = 100;
+            const MAX_CONCURRENT_BATCHES: usize = 10;
+
+            let batches: Vec<Vec<u64>> =
+                heights.chunks(BATCH_SIZE).map(|c| c.to_vec()).collect();
+
+            let results: Vec<eyre::Result<Vec<BlockAndReceipts>>> =
+                futures::stream::iter(batches)
+                    .map(|batch| {
+                        let client = client.clone();
+                        let metrics = metrics.clone();
+                        async move {
+                            metrics.polling_attempt.increment(batch.len() as u64);
+                            let bytes: Bytes =
+                                client.request("hl_syncGetBlocks", (batch,)).await?;
+                            let mut decoder =
+                                lz4_flex::frame::FrameDecoder::new(&bytes[..]);
+                            let blocks: Vec<BlockAndReceipts> =
+                                rmp_serde::from_read(&mut decoder)?;
+                            metrics.fetched.increment(blocks.len() as u64);
+                            Ok(blocks)
+                        }
+                    })
+                    .buffered(MAX_CONCURRENT_BATCHES)
+                    .collect()
+                    .await;
+
+            let mut all_blocks = Vec::with_capacity(heights.len());
+            for result in results {
+                all_blocks.extend(result?);
+            }
+            Ok(all_blocks)
         }
         .boxed()
     }

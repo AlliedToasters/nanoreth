@@ -1,5 +1,6 @@
 use crate::pseudo_peer::sources::BlockSourceBoxed;
 use alloy_primitives::Bytes;
+use futures::StreamExt;
 use jsonrpsee::proc_macros::rpc;
 use jsonrpsee_core::{RpcResult, async_trait};
 use reth::rpc::result::internal_rpc_err;
@@ -31,6 +32,11 @@ pub trait HlSyncApi {
     #[method(name = "syncGetBlock")]
     async fn sync_get_block(&self, height: u64) -> RpcResult<Bytes>;
 
+    /// Returns multiple blocks by height, serialized as msgpack+lz4 bytes.
+    /// Heights are capped at 100 per request.
+    #[method(name = "syncGetBlocks")]
+    async fn sync_get_blocks(&self, heights: Vec<u64>) -> RpcResult<Bytes>;
+
     /// Returns the latest block number available from this node's block source.
     #[method(name = "syncLatestBlockNumber")]
     async fn sync_latest_block_number(&self) -> RpcResult<Option<u64>>;
@@ -59,6 +65,30 @@ impl HlSyncApiServer for HlSyncServer {
             .finish()
             .map_err(|e| internal_rpc_err(format!("Failed to compress block: {e}")))?;
 
+        Ok(Bytes::from(compressed))
+    }
+
+    async fn sync_get_blocks(&self, heights: Vec<u64>) -> RpcResult<Bytes> {
+        const MAX_BATCH: usize = 100;
+        let heights = if heights.len() > MAX_BATCH { &heights[..MAX_BATCH] } else { &heights };
+        trace!(target: "rpc::hl", count = heights.len(), "Serving hl_syncGetBlocks");
+        let source = get_sync_block_source()?;
+
+        let futs: Vec<_> = heights.iter().map(|&h| source.collect_block(h)).collect();
+        let blocks: Vec<_> = futures::stream::iter(futs)
+            .buffered(MAX_BATCH)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<_, _>>()
+            .map_err(|e| internal_rpc_err(format!("Failed to collect blocks: {e}")))?;
+
+        let mut encoder = lz4_flex::frame::FrameEncoder::new(Vec::new());
+        rmp_serde::encode::write_named(&mut encoder, &blocks)
+            .map_err(|e| internal_rpc_err(format!("Failed to serialize blocks: {e}")))?;
+        let compressed = encoder
+            .finish()
+            .map_err(|e| internal_rpc_err(format!("Failed to compress blocks: {e}")))?;
         Ok(Bytes::from(compressed))
     }
 

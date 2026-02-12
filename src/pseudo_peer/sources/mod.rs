@@ -1,6 +1,6 @@
 use crate::node::types::BlockAndReceipts;
 use auto_impl::auto_impl;
-use futures::future::BoxFuture;
+use futures::{FutureExt, StreamExt, future::BoxFuture};
 use std::{sync::Arc, time::Duration};
 
 // Module declarations
@@ -31,6 +31,26 @@ pub trait BlockSource: Send + Sync + std::fmt::Debug + Unpin + 'static {
 
     /// Returns the recommended chunk size for batch operations
     fn recommended_chunk_size(&self) -> u64;
+
+    /// Retrieves multiple blocks by height. Default implementation uses
+    /// buffered concurrent calls to `collect_block`. Sources like RPC
+    /// can override this to use batch endpoints for better performance.
+    fn collect_blocks(
+        &self,
+        heights: Vec<u64>,
+    ) -> BoxFuture<'static, eyre::Result<Vec<BlockAndReceipts>>> {
+        let chunk_size = self.recommended_chunk_size() as usize;
+        let futs: Vec<_> = heights.into_iter().map(|h| self.collect_block(h)).collect();
+        async move {
+            futures::stream::iter(futs)
+                .buffered(chunk_size)
+                .collect::<Vec<_>>()
+                .await
+                .into_iter()
+                .collect()
+        }
+        .boxed()
+    }
 
     /// Returns the polling interval
     fn polling_interval(&self) -> Duration {
