@@ -89,6 +89,13 @@ pub struct HlNodeArgs {
     /// will be taken from CLI arguments instead of being hardcoded to localhost-only defaults.
     #[arg(long, env = "ALLOW_NETWORK_OVERRIDES")]
     pub allow_network_overrides: bool,
+
+    /// Enable the sync server RPC endpoints (hl_syncGetBlock, hl_syncLatestBlockNumber).
+    ///
+    /// When enabled, this node can serve blocks to other nanoreth nodes
+    /// that use --block-source=rpc://... to sync from this node.
+    #[arg(long, env = "ENABLE_SYNC_SERVER")]
+    pub enable_sync_server: bool,
 }
 
 /// The main reth_hl cli interface.

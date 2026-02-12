@@ -31,6 +31,10 @@ pub struct BlockSourceArgs {
     #[arg(id = "s3.polling-interval", long = "s3.polling-interval", default_value = "25")]
     s3_polling_interval: u64,
 
+    /// Interval for polling new blocks from RPC source in milliseconds.
+    #[arg(id = "rpc.polling-interval", long = "rpc.polling-interval", default_value = "100")]
+    rpc_polling_interval: u64,
+
     /// Maximum allowed delay for the hl-node block source in milliseconds.
     /// If this threshold is exceeded, the client falls back to other sources.
     #[arg(
@@ -42,38 +46,51 @@ pub struct BlockSourceArgs {
 }
 
 impl BlockSourceArgs {
-    pub async fn parse(&self) -> eyre::Result<BlockSourceConfig> {
-        let config = self.create_base_config().await?;
+    pub async fn parse(&self) -> eyre::Result<Option<BlockSourceConfig>> {
+        let Some(config) = self.create_base_config().await? else {
+            return Ok(None);
+        };
         let config = self.apply_node_source_config(config);
-        Ok(config)
+        Ok(Some(config))
     }
 
-    async fn create_base_config(&self) -> eyre::Result<BlockSourceConfig> {
+    async fn create_base_config(&self) -> eyre::Result<Option<BlockSourceConfig>> {
         if self.s3 {
-            return Ok(BlockSourceConfig::s3_default(Duration::from_millis(
-                self.s3_polling_interval,
-            ))
-            .await);
+            return Ok(Some(
+                BlockSourceConfig::s3_default(Duration::from_millis(self.s3_polling_interval))
+                    .await,
+            ));
         }
 
         if self.local {
-            return Ok(BlockSourceConfig::local_default());
+            return Ok(Some(BlockSourceConfig::local_default()));
         }
 
         let Some(value) = self.block_source.as_ref() else {
-            return Err(eyre::eyre!(
-                "You need to specify a block source e.g., --s3 or --block-source=/path/to/blocks"
-            ));
+            // No block source specified - node will sync from P2P peers only
+            return Ok(None);
         };
 
         if let Some(bucket) = value.strip_prefix("s3://") {
-            Ok(BlockSourceConfig::s3(
-                bucket.to_string(),
-                Duration::from_millis(self.s3_polling_interval),
-            )
-            .await)
+            Ok(Some(
+                BlockSourceConfig::s3(
+                    bucket.to_string(),
+                    Duration::from_millis(self.s3_polling_interval),
+                )
+                .await,
+            ))
+        } else if let Some(url) = value.strip_prefix("rpc://") {
+            let url = if url.starts_with("http://") || url.starts_with("https://") {
+                url.to_string()
+            } else {
+                format!("http://{url}")
+            };
+            Ok(Some(BlockSourceConfig::rpc(
+                url,
+                Duration::from_millis(self.rpc_polling_interval),
+            )))
         } else {
-            Ok(BlockSourceConfig::local(value.into()))
+            Ok(Some(BlockSourceConfig::local(value.into())))
         }
     }
 
