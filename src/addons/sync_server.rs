@@ -49,8 +49,11 @@ impl HlSyncApiServer for HlSyncServer {
             .map_err(|e| internal_rpc_err(format!("Failed to collect block {height}: {e}")))?;
 
         // Encode as msgpack + lz4 (same format as S3/local block sources)
+        // Use write_named (map format) to match the S3/Go msgpack format.
+        // The default write() uses compact/array format which causes
+        // deserialization errors due to field ordering differences.
         let mut encoder = lz4_flex::frame::FrameEncoder::new(Vec::new());
-        rmp_serde::encode::write(&mut encoder, &vec![block])
+        rmp_serde::encode::write_named(&mut encoder, &vec![block])
             .map_err(|e| internal_rpc_err(format!("Failed to serialize block: {e}")))?;
         let compressed = encoder
             .finish()
