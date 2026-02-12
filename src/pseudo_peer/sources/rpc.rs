@@ -66,7 +66,7 @@ impl BlockSource for RpcBlockSource {
     }
 
     fn recommended_chunk_size(&self) -> u64 {
-        100
+        1000
     }
 
     fn polling_interval(&self) -> Duration {
