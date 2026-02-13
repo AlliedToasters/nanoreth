@@ -130,13 +130,13 @@ struct CurrentFile {
 }
 
 impl CurrentFile {
-    pub fn from_datetime(dt: OffsetDateTime, root: &Path) -> Self {
+    fn from_datetime(dt: OffsetDateTime, root: &Path) -> Self {
         let (hour, day_str) = (dt.hour(), TimeUtils::date_from_datetime(dt));
         let path = root.join(HOURLY_SUBDIR).join(&day_str).join(format!("{}", hour));
         Self { path, line_stream: None }
     }
 
-    pub fn open(&mut self) -> eyre::Result<()> {
+    fn open(&mut self) -> eyre::Result<()> {
         if self.line_stream.is_some() {
             return Ok(());
         }
@@ -144,6 +144,18 @@ impl CurrentFile {
         self.line_stream = Some(LineStream::from_path(&self.path)?);
         Ok(())
     }
+}
+
+/// Checks if a file has any blocks (i.e., hl-node is actively writing to it).
+fn file_has_blocks(path: &Path) -> bool {
+    LineStream::from_path(path).is_ok_and(|mut stream| {
+        !Scanner::scan_hour_file(
+            &mut stream,
+            ScanOptions { start_height: 0, only_load_ranges: true },
+        )
+        .new_block_ranges
+        .is_empty()
+    })
 }
 
 impl HlNodeBlockSource {
@@ -229,12 +241,26 @@ impl HlNodeBlockSource {
                     next_height = scan_result.next_expected_height;
                     cache.lock().await.load_scan_result(scan_result);
                 }
+                // Check if we should switch to the next hourly file
                 let now = OffsetDateTime::now_utc();
-                if dt + ONE_HOUR < now {
-                    dt += ONE_HOUR;
-                    current_file = CurrentFile::from_datetime(dt, &root);
-                    info!("Moving to new file: {:?}", current_file.path);
-                    continue;
+                let next_dt = dt + ONE_HOUR;
+                if next_dt < now {
+                    let next_file = CurrentFile::from_datetime(next_dt, &root);
+                    if file_has_blocks(&next_file.path) {
+                        // Final scan of current file to catch any late-written blocks
+                        if let Some(line_stream) = &mut current_file.line_stream {
+                            let scan_result = Scanner::scan_hour_file(
+                                line_stream,
+                                ScanOptions { start_height: next_height, only_load_ranges: false },
+                            );
+                            next_height = scan_result.next_expected_height;
+                            cache.lock().await.load_scan_result(scan_result);
+                        }
+                        dt = next_dt;
+                        current_file = next_file;
+                        info!("Moving to new file: {:?}", current_file.path);
+                        continue; // Start reading new file immediately
+                    }
                 }
                 tokio::time::sleep(TAIL_INTERVAL).await;
             }
