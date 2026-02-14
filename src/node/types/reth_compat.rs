@@ -47,6 +47,48 @@ pub struct TransactionSigned {
     transaction: Transaction,
 }
 impl TransactionSigned {
+    /// Convert from the node's TransactionSigned back to reth_compat format.
+    pub fn from_node_tx(tx: TxSigned) -> Self {
+        use alloy_consensus::EthereumTxEnvelope;
+        let inner = tx.into_inner();
+        match inner {
+            EthereumTxEnvelope::Legacy(signed) => {
+                let (tx, sig, _) = signed.into_parts();
+                Self { signature: sig, transaction: Transaction::Legacy(tx) }
+            }
+            EthereumTxEnvelope::Eip2930(signed) => {
+                let (tx, sig, _) = signed.into_parts();
+                Self { signature: sig, transaction: Transaction::Eip2930(tx) }
+            }
+            EthereumTxEnvelope::Eip1559(signed) => {
+                let (tx, sig, _) = signed.into_parts();
+                Self { signature: sig, transaction: Transaction::Eip1559(tx) }
+            }
+            EthereumTxEnvelope::Eip4844(signed) => {
+                let (tx, sig, _) = signed.into_parts();
+                Self { signature: sig, transaction: Transaction::Eip4844(tx) }
+            }
+            EthereumTxEnvelope::Eip7702(signed) => {
+                let (tx, sig, _) = signed.into_parts();
+                Self { signature: sig, transaction: Transaction::Eip7702(tx) }
+            }
+        }
+    }
+
+    /// Extract just the transaction (without signature) from a node TransactionSigned.
+    /// Used for system transactions where the signature is fabricated.
+    pub fn extract_transaction(tx: TxSigned) -> Transaction {
+        use alloy_consensus::EthereumTxEnvelope;
+        let inner = tx.into_inner();
+        match inner {
+            EthereumTxEnvelope::Legacy(signed) => Transaction::Legacy(signed.into_parts().0),
+            EthereumTxEnvelope::Eip2930(signed) => Transaction::Eip2930(signed.into_parts().0),
+            EthereumTxEnvelope::Eip1559(signed) => Transaction::Eip1559(signed.into_parts().0),
+            EthereumTxEnvelope::Eip4844(signed) => Transaction::Eip4844(signed.into_parts().0),
+            EthereumTxEnvelope::Eip7702(signed) => Transaction::Eip7702(signed.into_parts().0),
+        }
+    }
+
     fn to_reth_transaction(&self) -> TxSigned {
         match self.transaction.clone() {
             Transaction::Legacy(tx) => {

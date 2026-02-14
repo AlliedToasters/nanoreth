@@ -74,6 +74,74 @@ impl BlockAndReceipts {
         )
     }
 
+    /// Construct a `BlockAndReceipts` from database types (reverse of `to_reth_block`).
+    ///
+    /// Splits system transactions and receipts from regular ones using
+    /// the `system_tx_count` stored in the header extras.
+    pub fn from_db(block: HlBlock, receipts: Vec<EthereumReceipt>) -> Self {
+        let system_tx_count = block.header.extras.system_tx_count as usize;
+        let hash = alloy_primitives::Sealable::hash_slow(&block.header);
+        let all_txs = block.body.inner.transactions;
+
+        // Split system txs from regular txs
+        let (system_tx_list, regular_tx_list) = if system_tx_count > 0 && system_tx_count <= all_txs.len() {
+            let (sys, reg) = all_txs.into_iter().enumerate().partition::<Vec<_>, _>(|(i, _)| *i < system_tx_count);
+            (sys.into_iter().map(|(_, tx)| tx).collect::<Vec<_>>(), reg.into_iter().map(|(_, tx)| tx).collect::<Vec<_>>())
+        } else {
+            (vec![], all_txs)
+        };
+
+        // Split receipts
+        let (system_receipts, regular_receipts) = if system_tx_count > 0 && system_tx_count <= receipts.len() {
+            let (sys, reg) = receipts.into_iter().enumerate().partition::<Vec<_>, _>(|(i, _)| *i < system_tx_count);
+            (sys.into_iter().map(|(_, r)| r).collect::<Vec<_>>(), reg.into_iter().map(|(_, r)| r).collect::<Vec<_>>())
+        } else {
+            (vec![], receipts)
+        };
+
+        // Convert system transactions
+        let system_txs: Vec<SystemTx> = system_tx_list
+            .into_iter()
+            .zip(system_receipts)
+            .map(|(tx, receipt)| SystemTx {
+                tx: reth_compat::TransactionSigned::extract_transaction(tx),
+                receipt: Some(receipt.into()),
+            })
+            .collect();
+
+        // Convert regular transactions to reth_compat format
+        let compat_txs: Vec<reth_compat::TransactionSigned> = regular_tx_list
+            .into_iter()
+            .map(reth_compat::TransactionSigned::from_node_tx)
+            .collect();
+
+        // Convert regular receipts
+        let legacy_receipts: Vec<LegacyReceipt> = regular_receipts
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        let sealed_block = reth_compat::SealedBlock {
+            header: reth_compat::SealedHeader {
+                hash,
+                header: block.header.inner,
+            },
+            body: alloy_consensus::BlockBody {
+                transactions: compat_txs,
+                ommers: vec![],
+                withdrawals: block.body.inner.withdrawals,
+            },
+        };
+
+        BlockAndReceipts {
+            block: EvmBlock::Reth115(sealed_block),
+            receipts: legacy_receipts,
+            system_txs,
+            read_precompile_calls: block.body.read_precompile_calls.unwrap_or_default(),
+            highest_precompile_address: block.body.highest_precompile_address,
+        }
+    }
+
     pub fn hash(&self) -> B256 {
         let EvmBlock::Reth115(block) = &self.block;
         block.header.hash
@@ -107,6 +175,23 @@ impl From<LegacyReceipt> for EthereumReceipt {
                 LegacyTxType::Eip1559 => TxType::Eip1559,
                 LegacyTxType::Eip4844 => TxType::Eip4844,
                 LegacyTxType::Eip7702 => TxType::Eip7702,
+            },
+            success: r.success,
+            cumulative_gas_used: r.cumulative_gas_used,
+            logs: r.logs,
+        }
+    }
+}
+
+impl From<EthereumReceipt> for LegacyReceipt {
+    fn from(r: EthereumReceipt) -> Self {
+        LegacyReceipt {
+            tx_type: match r.tx_type {
+                TxType::Legacy => LegacyTxType::Legacy,
+                TxType::Eip2930 => LegacyTxType::Eip2930,
+                TxType::Eip1559 => LegacyTxType::Eip1559,
+                TxType::Eip4844 => LegacyTxType::Eip4844,
+                TxType::Eip7702 => LegacyTxType::Eip7702,
             },
             success: r.success,
             cumulative_gas_used: r.cumulative_gas_used,

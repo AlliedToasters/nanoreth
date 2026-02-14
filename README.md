@@ -58,6 +58,38 @@ $ reth-hl node --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 \
     --ws --ws.addr 0.0.0.0 --ws.origins '*' --ws.api eth,ots,net,web3 --ingest-dir ~/evm-blocks --local-ingest-dir <path-to-your-hl-node-evm-blocks-dir> --ws.port 8545
 ```
 
+## How to run (syncing from another nanoreth node via RPC)
+
+If you already have a nanoreth node running (e.g. in the cloud with S3 access), you can sync a local node from it without needing S3 credentials.
+
+**On the serving node** (cloud), add `--enable-sync-server` to its launch flags:
+
+```sh
+reth-hl node --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 \
+  --ws --ws.addr 0.0.0.0 --ws.origins '*' --ws.api eth,ots,net,web3 \
+  --ws.port 8545 --http.port 8545 --s3 --enable-sync-server
+```
+
+**On the local node**, point `--block-source` to the serving node's RPC:
+
+```sh
+reth-hl node --http --http.api eth,ots,net,web3 \
+  --block-source=rpc://your-cloud-node:8545
+```
+
+The `--rpc.polling-interval` flag controls how often the local node polls for new blocks (default: 100ms).
+
+## Architecture: How nanoreth differs from reth
+
+Nanoreth replaces reth's native P2P sync pipeline with a **pseudo peer + block source** architecture:
+
+- **Standard reth** syncs by downloading headers and bodies from P2P peers, then re-executing every transaction locally to produce receipts and state. The eth wire protocol only transfers headers and bodies — receipts are never sent over P2P because each node generates its own.
+- **Nanoreth** does not re-execute blocks. Blocks arrive pre-executed from hl-node (the Go Hyperliquid node), so receipts must be **transferred** alongside blocks. Since the eth wire protocol has no mechanism for this, nanoreth fetches complete blocks (with receipts) from an external **block source** (S3, local files, or another nanoreth node via RPC). A "pseudo peer" process connects to the main node as a localhost P2P peer and serves these blocks when requested. Blocks are imported via the engine API (`new_payload` + `fork_choice_updated`), bypassing reth's download pipeline entirely.
+
+This means reth's `--bootnodes` and `--trusted-peers` flags will establish P2P connections but **will not trigger historical block sync** — the sync pipeline stages that request blocks from peers are not active in nanoreth. A block source (`--s3`, `--local`, `--block-source`) is required for syncing.
+
+Nanoreth also extends reth's block types with Hyperliquid-specific fields (`system_tx_count`, `read_precompile_calls`, `highest_precompile_address`, blob `sidecars`) that are not part of the standard Ethereum wire protocol, further requiring the custom sync path.
+
 ## How to run (testnet)
 
 Testnet is supported since block 34112653.

@@ -2,7 +2,7 @@ use crate::chainspec::HlChainSpec;
 
 use super::sources::{
     BlockSourceBoxed, CachedBlockSource, HlNodeBlockSource, HlNodeBlockSourceArgs,
-    LocalBlockSource, S3BlockSource,
+    LocalBlockSource, RpcBlockSource, S3BlockSource,
 };
 use aws_config::BehaviorVersion;
 use std::{env::home_dir, path::PathBuf, sync::Arc, time::Duration};
@@ -18,6 +18,7 @@ pub enum BlockSourceType {
     S3Default { polling_interval: Duration },
     S3 { bucket: String, polling_interval: Duration },
     Local { path: PathBuf },
+    Rpc { url: String, polling_interval: Duration },
 }
 
 impl BlockSourceConfig {
@@ -37,6 +38,13 @@ impl BlockSourceConfig {
 
     pub fn local(path: PathBuf) -> Self {
         Self { source_type: BlockSourceType::Local { path }, block_source_from_node: None }
+    }
+
+    pub fn rpc(url: String, polling_interval: Duration) -> Self {
+        Self {
+            source_type: BlockSourceType::Rpc { url, polling_interval },
+            block_source_from_node: None,
+        }
     }
 
     pub fn local_default() -> Self {
@@ -70,6 +78,9 @@ impl BlockSourceConfig {
             }
             BlockSourceType::Local { path } => {
                 Arc::new(Box::new(LocalBlockSource::new(path.clone())))
+            }
+            BlockSourceType::Rpc { url, polling_interval } => {
+                Arc::new(Box::new(RpcBlockSource::new(url.clone(), *polling_interval)))
             }
         }
     }

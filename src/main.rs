@@ -11,6 +11,7 @@ use reth_hl::{
         call_forwarder::{self, CallForwarderApiServer},
         hl_node_compliance::install_hl_node_compliance,
         subscribe_fixup::SubscribeFixup,
+        sync_server::{HlSyncApiServer, HlSyncServer, ProviderSyncReader, set_sync_db_reader},
         tx_forwarder::{self, EthForwarderApiServer},
     },
     chainspec::{HlChainSpec, parser::HlChainSpecParser},
@@ -41,6 +42,7 @@ fn main() -> eyre::Result<()> {
          ext: HlNodeArgs| async move {
             let default_upstream_rpc_url = builder.config().chain.official_rpc_url();
 
+            let enable_sync_server = ext.enable_sync_server;
             let (node, engine_handle_tx) = HlNode::new(
                 ext.block_source_args.parse().await?,
                 ext.debug_cutoff_height,
@@ -87,6 +89,13 @@ fn main() -> eyre::Result<()> {
                     if !ext.experimental_eth_get_proof {
                         ctx.modules.remove_method_from_configured("eth_getProof");
                         info!("eth_getProof is disabled by default");
+                    }
+
+                    if enable_sync_server {
+                        let provider = ctx.registry.eth_api().provider().clone();
+                        set_sync_db_reader(Box::new(ProviderSyncReader::new(provider)));
+                        ctx.modules.merge_configured(HlSyncServer.into_rpc())?;
+                        info!("Sync server RPC enabled (serving blocks from database)");
                     }
 
                     ctx.modules.merge_configured(

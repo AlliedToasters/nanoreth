@@ -49,14 +49,14 @@ pub type HlNodeAddOns<N> =
 #[derive(Debug, Clone)]
 pub struct HlNode {
     engine_handle_rx: Arc<Mutex<Option<oneshot::Receiver<ConsensusEngineHandle<HlPayloadTypes>>>>>,
-    block_source_config: BlockSourceConfig,
+    block_source_config: Option<BlockSourceConfig>,
     debug_cutoff_height: Option<u64>,
     allow_network_overrides: bool,
 }
 
 impl HlNode {
     pub fn new(
-        block_source_config: BlockSourceConfig,
+        block_source_config: Option<BlockSourceConfig>,
         debug_cutoff_height: Option<u64>,
         allow_network_overrides: bool,
     ) -> (Self, oneshot::Sender<ConsensusEngineHandle<HlPayloadTypes>>) {

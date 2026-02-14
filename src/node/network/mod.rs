@@ -144,7 +144,8 @@ pub struct HlNetworkBuilder {
     pub(crate) engine_handle_rx:
         Arc<Mutex<Option<oneshot::Receiver<ConsensusEngineHandle<HlPayloadTypes>>>>>,
 
-    pub(crate) block_source_config: BlockSourceConfig,
+    // optional because we might sync from network
+    pub(crate) block_source_config: Option<BlockSourceConfig>,
 
     pub(crate) debug_cutoff_height: Option<u64>,
 
@@ -225,26 +226,31 @@ where
         let local_node_record = handle.local_node_record();
         info!(target: "reth::cli", enode=%local_node_record, "P2P networking initialized");
 
-        let next_block_number = ctx
-            .provider()
-            .get_stage_checkpoint(StageId::Finish)?
-            .unwrap_or_default()
-            .block_number +
-            1;
+        if let Some(block_source_config) = block_source_config {
+            let next_block_number = ctx
+                .provider()
+                .get_stage_checkpoint(StageId::Finish)?
+                .unwrap_or_default()
+                .block_number
+                + 1;
 
-        let chain_spec = ctx.chain_spec();
-        ctx.task_executor().spawn_critical("pseudo peer", async move {
-            start_pseudo_peer(
-                chain_spec.clone(),
-                local_node_record.to_string(),
-                block_source_config
+            let chain_spec = ctx.chain_spec();
+            ctx.task_executor().spawn_critical("pseudo peer", async move {
+                let block_source = block_source_config
                     .create_cached_block_source((*chain_spec).clone(), next_block_number)
-                    .await,
-                debug_cutoff_height,
-            )
-            .await
-            .unwrap();
-        });
+                    .await;
+                start_pseudo_peer(
+                    chain_spec.clone(),
+                    local_node_record.to_string(),
+                    block_source,
+                    debug_cutoff_height,
+                )
+                .await
+                .unwrap();
+            });
+        } else {
+            info!(target: "reth::cli", "No block source configured - syncing from P2P peers only");
+        }
 
         Ok(handle)
     }
