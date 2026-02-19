@@ -16,6 +16,8 @@ This fork adds fixes needed for testnet sync with local block sources:
 
 4. **Pseudo peer hash cache fix**: Caches block hash-to-number mappings during `GetBlockHeaders` responses and increases the LRU cache from 1M to 15M entries. Without this, the `GetBlockBodies` handler (which receives requests by hash) triggers slow backfill scans that block the pseudo peer event loop, causing protocol timeout disconnects. Also removes the public RPC fallback in favor of hard failure for faster debugging.
 
+5. **EIP-155 chain\_id extraction**: Extracts `chain_id` from Legacy transaction signature `v` values during msgpack deserialization. Some block sources (notably RPC-fetched blocks) omit the `chainId` field from Legacy transactions while encoding the chain\_id in the EIP-155 `v` value (e.g. `v=2032` for chain\_id=998). Without extraction, reth computes the wrong transaction hash and recovers the wrong sender address, causing "nonce too high" execution errors.
+
 ### Branch structure
 
 - **`main`**: All fixes on top of upstream `node-builder` — use this to run the testnet node
@@ -226,6 +228,8 @@ python scripts/check_block_completeness.py --blocks-dir /path/to/blocks --fix
 
 Fetches missing blocks from the public Hyperliquid testnet RPC and writes them in nanoreth's MessagePack + LZ4 format (Reth115 structure). Useful for filling gaps near the chain tip that aren't yet on S3. Rate-limited to ~120 calls/min.
 
+**Important limitation:** RPC-fetched blocks are missing `read_precompile_calls` data (always set to `[]`) because the public RPC does not expose precompile call recordings. Most blocks don't call precompiles, but the ~1% that do will fail execution with a gas mismatch error. See [Known issue: RPC-fetched blocks missing precompile data](#known-issue-rpc-fetched-blocks-missing-precompile-data) for details and workarounds.
+
 ```sh
 # Fill from cache latest to chain tip
 python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks
@@ -248,3 +252,39 @@ python scripts/download_boundary_blocks.py --blocks-dir /path/to/blocks
 # Dry run (count only)
 python scripts/download_boundary_blocks.py --blocks-dir /path/to/blocks --dry-run
 ```
+
+## Known issue: RPC-fetched blocks missing precompile data
+
+### Problem
+
+The S3 testnet block archive has a few hundred gaps where block files are missing. The `fetch_blocks_rpc.py` script fills these gaps by fetching blocks from the public Hyperliquid testnet RPC. However, RPC-fetched blocks differ from S3-sourced blocks in two ways:
+
+1. **Missing `read_precompile_calls`**: Always set to `[]`. The public RPC does not expose precompile call recordings. When the Execution stage encounters a block whose transaction internally calls an HL L1 precompile (addresses `0x0800`-`0x0813`), nanoreth registers a dummy precompile that returns `OutOfGas`. This causes the contract to take a different code path, producing a gas mismatch (e.g. "got 1881520, expected 139990") and incorrect state transitions. The pipeline unwinds and gets stuck in a loop.
+
+2. **Legacy transaction encoding differences**: The RPC returns the full EIP-155 `v` value (e.g. 2032) in the signature but may omit the `chainId` field from Legacy transaction bodies. Fix #5 (EIP-155 chain\_id extraction) handles this at deserialization time.
+
+Only ~1% of transaction-bearing blocks actually invoke precompiles, so most RPC-fetched blocks execute correctly. The issue only manifests when a transaction in an RPC-fetched block calls an `0x08xx` precompile.
+
+### Mitigation strategy
+
+In priority order:
+
+1. **Re-sync from S3 first.** Always run `aws s3 sync` before `fetch_blocks_rpc.py` so that S3-available blocks (which include precompile data) are not overwritten by RPC-fetched versions. Use `--size-only` to detect and replace any RPC-fetched blocks that S3 now covers:
+   ```sh
+   aws s3 sync s3://hl-testnet-evm-blocks/ ~/evm-blocks --request-payer requester --size-only
+   ```
+
+2. **Sync from another nanoreth node.** If you have access to a synced nanoreth node (yours or someone else's), use the `rpc://` block source or the `eth_blockPrecompileData` RPC endpoint to get complete block data including precompile recordings:
+   ```sh
+   # Option A: Use rpc:// source for full sync (includes precompile data)
+   reth-hl node --chain testnet --block-source rpc://synced-node:8545 ...
+
+   # Option B: Query precompile data for a specific block
+   curl -X POST http://synced-node:8545 \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","method":"eth_blockPrecompileData","params":["0x2BC544D"],"id":1}'
+   ```
+
+3. **Identify affected blocks.** Most RPC-fetched blocks don't call precompiles and execute fine. To find which ones do, run the Execution stage and note the `bad_block` number from any gas mismatch error. Then check if that block's `read_precompile_calls` is empty and whether it has transactions that interact with HL precompiles.
+
+4. **Report S3 gaps upstream.** File an issue at [hl-archive-node/nanoreth](https://github.com/hl-archive-node/nanoreth/issues) or ask in the [Hyperliquid Discord](https://discord.gg/hyperliquid) #node-operators channel to get the missing blocks added to the S3 archive.
