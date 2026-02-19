@@ -1,9 +1,23 @@
-# nanoreth
+# nanoreth (testnet fork)
 
-HyperEVM archive node implementation based on [reth](https://github.com/paradigmxyz/reth).
-NodeBuilder API version is heavily inspired by [reth-bsc](https://github.com/loocapro/reth-bsc).
+Fork of [hl-archive-node/nanoreth](https://github.com/hl-archive-node/nanoreth) focused on running a **HyperEVM testnet** archive node for NFT sales indexing.
 
-Got questions? Drop by the [Hyperliquid Discord](https://discord.gg/hyperliquid) #node-operators channel.
+Upstream nanoreth is a HyperEVM archive node implementation based on [reth](https://github.com/paradigmxyz/reth). See the [upstream README](https://github.com/hl-archive-node/nanoreth) for general documentation.
+
+## Fork changes
+
+This fork adds fixes needed for testnet sync with local block sources:
+
+1. **Local block source pipeline trigger** ([PR #118](https://github.com/hl-archive-node/nanoreth/pull/118)): `--block-source /local-path` now triggers the sync pipeline via a direct `fork_choice_updated()` call. Without this, the pipeline never starts because the pseudo peer's block announcements don't generate forkchoice updates on this post-merge chain.
+
+2. **Init-state path validation**: Prevents a cryptic "Is a directory" error when `init-state` is given a directory instead of a file.
+
+### Branch structure
+
+- **`main`**: All fixes on top of upstream `node-builder` — use this to run the testnet node
+- **`fix/*` branches**: Isolated single-commit branches for clean upstream PRs
+
+## Upstream
 
 ## ⚠️ IMPORTANT: System Transactions Appear as Pseudo Transactions
 
