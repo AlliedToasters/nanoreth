@@ -8,7 +8,6 @@ use crate::{
 };
 use alloy_eips::HashOrNumber;
 use alloy_primitives::{B256, U128};
-use alloy_rpc_types::Block;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use reth_eth_wire::{
@@ -31,7 +30,7 @@ use tracing::{debug, info};
 
 /// A cache of block hashes to block numbers.
 pub type BlockHashCache = Arc<RwLock<LruBiMap<B256, u64>>>;
-const BLOCKHASH_CACHE_LIMIT: u32 = 1000000;
+const BLOCKHASH_CACHE_LIMIT: u32 = 15_000_000;
 
 pub fn new_blockhash_cache() -> BlockHashCache {
     Arc::new(RwLock::new(LruBiMap::new(BLOCKHASH_CACHE_LIMIT)))
@@ -178,17 +177,34 @@ impl<BS: BlockSource> PseudoPeer<BS> {
                     HashOrNumber::Number(number) => number,
                 };
 
-                let block_headers = match direction {
+                let blocks = match direction {
                     HeadersDirection::Rising => self.collect_blocks(number..number + limit).await,
                     HeadersDirection::Falling => {
                         self.collect_blocks((number + 1 - limit..number + 1).rev()).await
                     }
-                }?
-                .into_par_iter()
-                .map(|block| block.to_reth_block(chain_id).header.clone())
-                .collect::<Vec<_>>();
+                }?;
 
-                let _ = response.send(Ok(BlockHeaders(block_headers)));
+                // Cache hash→number mappings so GetBlockBodies can resolve
+                // hashes without a slow backfill scan.
+                let block_headers = blocks
+                    .into_par_iter()
+                    .map(|block| {
+                        let reth_block = block.to_reth_block(chain_id);
+                        let hash = reth_block.header.hash_slow();
+                        let number = reth_block.header.number;
+                        (hash, number, reth_block.header.clone())
+                    })
+                    .collect::<Vec<_>>();
+
+                {
+                    let mut cache = self.blockhash_cache.write();
+                    for &(hash, number, _) in &block_headers {
+                        cache.insert(hash, number);
+                    }
+                }
+
+                let headers = block_headers.into_iter().map(|(_, _, h)| h).collect();
+                let _ = response.send(Ok(BlockHeaders(headers)));
             }
             IncomingEthRequest::GetBlockBodies { peer_id: _, request, response } => {
                 let GetBlockBodies(hashes) = request;
@@ -236,20 +252,12 @@ impl<BS: BlockSource> PseudoPeer<BS> {
         panic!("Hash not found: {hash:?}");
     }
 
-    async fn fallback_to_official_rpc(&self, hash: B256) -> eyre::Result<u64> {
-        // This is tricky because Raw EVM files (BlockSource) does not have hash to number mapping
-        // so we can either enumerate all blocks to get hash to number mapping, or fallback to an
-        // official RPC. The latter is much easier but has 300/day rate limit.
-        use jsonrpsee::http_client::HttpClientBuilder;
-        use jsonrpsee_core::client::ClientT;
-
-        debug!("Fallback to official RPC: {hash:?}");
-        let client =
-            HttpClientBuilder::default().build(self.chain_spec.official_rpc_url()).unwrap();
-        let target_block: Block = client.request("eth_getBlockByHash", (hash, false)).await?;
-        debug!("From official RPC: {:?} for {hash:?}", target_block.header.number);
-        self.cache_blocks([(hash, target_block.header.number)]);
-        Ok(target_block.header.number)
+    fn fail_hash_not_found(&self, hash: B256, iteration: usize) -> eyre::Result<u64> {
+        eyre::bail!(
+            "Hash {hash:?} not found in local block source after scanning {iteration} chunks. \
+             All blocks should be available locally — this indicates the blockhash cache is \
+             not being populated during header downloads."
+        )
     }
 
     /// Try to get a block number from the cache for the given hash
@@ -265,43 +273,36 @@ impl<BS: BlockSource> PseudoPeer<BS> {
         }
     }
 
-    /// Backfill the cache with blocks to find the target hash
+    /// Backfill the cache with blocks to find the target hash.
+    ///
+    /// Hard-fails after scanning a limited number of chunks rather than falling
+    /// back to a rate-limited public RPC. With the blockhash cache now populated
+    /// during GetBlockHeaders, this backfill should rarely be needed.
     async fn backfill_cache_for_hash(
         &mut self,
         target_hash: B256,
         latest: u64,
     ) -> eyre::Result<Option<u64>> {
         let chunk_size = self.block_source.recommended_chunk_size();
-        debug!("Hash not found, backfilling... {target_hash:?}");
+        debug!("Hash not found in cache, backfilling... {target_hash:?}");
 
-        const TRY_OFFICIAL_RPC_THRESHOLD: usize = 20;
+        const MAX_BACKFILL_CHUNKS: usize = 20;
         for (iteration, end) in (1..=latest).rev().step_by(chunk_size as usize).enumerate() {
-            // Calculate the range to backfill
+            if iteration >= MAX_BACKFILL_CHUNKS {
+                self.fail_hash_not_found(target_hash, iteration)?;
+            }
+
             let start = std::cmp::max(end.saturating_sub(chunk_size), 1);
 
-            // Backfill this chunk
             if let Ok(Some(block_number)) =
                 self.try_block_range_for_hash(start, end, target_hash).await
             {
                 return Ok(Some(block_number));
             }
-
-            // If not found, first fallback to an official RPC
-            if iteration >= TRY_OFFICIAL_RPC_THRESHOLD {
-                match self.fallback_to_official_rpc(target_hash).await {
-                    Ok(block_number) => {
-                        self.warm_cache_around_blocks(block_number, self.warm_cache_size).await;
-                        return Ok(Some(block_number));
-                    }
-                    Err(e) => {
-                        debug!("Fallback to official RPC failed: {e:?}");
-                    }
-                }
-            }
         }
 
         debug!("Hash not found: {target_hash:?}, retrying from the latest block...");
-        Ok(None) // Not found
+        Ok(None)
     }
 
     async fn warm_cache_around_blocks(&mut self, block_number: u64, chunk_size: u64) {
