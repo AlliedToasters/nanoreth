@@ -11,7 +11,9 @@ use crate::{
     },
     pseudo_peer::{BlockSourceConfig, start_pseudo_peer},
 };
+use alloy_primitives::B256;
 use alloy_rlp::{Decodable, Encodable};
+use alloy_rpc_types::engine::ForkchoiceState;
 use reth::{
     api::{FullNodeTypes, TxTy},
     builder::{BuilderContext, components::NetworkBuilder},
@@ -23,7 +25,9 @@ use reth_eth_wire::{BasicNetworkPrimitives, NewBlock, NewBlockPayload};
 use reth_ethereum_primitives::PooledTransactionVariant;
 use reth_network::{NetworkConfig, NetworkHandle, NetworkManager};
 use reth_network_api::PeersInfo;
+use reth_payload_primitives::EngineApiMessageVersion;
 use reth_provider::StageCheckpointReader;
+use reth_storage_api::{BlockHashReader, BlockNumReader};
 use reth_stages_types::StageId;
 use std::{
     net::{Ipv4Addr, SocketAddr},
@@ -159,6 +163,7 @@ impl HlNetworkBuilder {
     pub fn network_config<Node>(
         self,
         ctx: &BuilderContext<Node>,
+        fcu_trigger_rx: oneshot::Receiver<B256>,
     ) -> eyre::Result<NetworkConfig<Node::Provider, HlNetworkPrimitives>>
     where
         Node: FullNodeTypes<Types = HlNode>,
@@ -169,7 +174,7 @@ impl HlNetworkBuilder {
         let consensus = Arc::new(HlConsensus { provider: ctx.provider().clone() });
 
         ctx.task_executor().spawn_critical("block import", async move {
-            let handle = self
+            let engine = self
                 .engine_handle_rx
                 .lock()
                 .await
@@ -177,7 +182,35 @@ impl HlNetworkBuilder {
                 .expect("node should only be launched once")
                 .await
                 .unwrap();
-            ImportService::new(consensus, handle, from_network, to_network).await.unwrap();
+
+            // If a block source provided a target hash, send an initial forkchoice
+            // update to the engine to trigger the pipeline. This is needed because
+            // the pseudo peer's NewBlock announcements via the network layer don't
+            // reliably generate forkchoice updates on this post-merge chain.
+            if let Ok(target_hash) = fcu_trigger_rx.await {
+                let finalized_hash = consensus
+                    .provider
+                    .best_block_number()
+                    .ok()
+                    .and_then(|n| consensus.provider.block_hash(n).ok().flatten())
+                    .unwrap_or(target_hash);
+                let state = ForkchoiceState {
+                    head_block_hash: target_hash,
+                    safe_block_hash: finalized_hash,
+                    finalized_block_hash: finalized_hash,
+                };
+                info!(
+                    target: "reth::cli",
+                    head = %target_hash,
+                    finalized = %finalized_hash,
+                    "Sending initial forkchoice update to trigger pipeline"
+                );
+                let _ = engine
+                    .fork_choice_updated(state, None, EngineApiMessageVersion::default())
+                    .await;
+            }
+
+            ImportService::new(consensus, engine, from_network, to_network).await.unwrap();
         });
 
         let mut config_builder = ctx.network_config_builder()?;
@@ -221,8 +254,11 @@ where
     ) -> eyre::Result<Self::Network> {
         let block_source_config = self.block_source_config.clone();
         let debug_cutoff_height = self.debug_cutoff_height;
-        let handle =
-            ctx.start_network(NetworkManager::builder(self.network_config(ctx)?).await?, pool);
+        let (fcu_trigger_tx, fcu_trigger_rx) = oneshot::channel();
+        let handle = ctx.start_network(
+            NetworkManager::builder(self.network_config(ctx, fcu_trigger_rx)?).await?,
+            pool,
+        );
         let local_node_record = handle.local_node_record();
         info!(target: "reth::cli", enode=%local_node_record, "P2P networking initialized");
 
@@ -235,10 +271,39 @@ where
                 + 1;
 
             let chain_spec = ctx.chain_spec();
+            let chain_id = chain_spec.inner.chain().id();
             ctx.task_executor().spawn_critical("pseudo peer", async move {
                 let block_source = block_source_config
                     .create_cached_block_source((*chain_spec).clone(), next_block_number)
                     .await;
+
+                // Read the latest block and send its hash to trigger the pipeline
+                // via a direct forkchoice update. This must happen before
+                // start_pseudo_peer (which never returns).
+                if let Some(latest) = block_source.find_latest_block_number().await {
+                    match block_source.collect_block(latest).await {
+                        Ok(block) => {
+                            let reth_block = block.to_reth_block(chain_id);
+                            let hash =
+                                alloy_primitives::Sealable::hash_slow(&reth_block.header);
+                            info!(
+                                target: "reth::cli",
+                                number = %latest,
+                                hash = %hash,
+                                "Sending forkchoice trigger from block source"
+                            );
+                            let _ = fcu_trigger_tx.send(hash);
+                        }
+                        Err(e) => {
+                            info!(
+                                target: "reth::cli",
+                                %e,
+                                "Failed to read latest block for forkchoice trigger"
+                            );
+                        }
+                    }
+                }
+
                 start_pseudo_peer(
                     chain_spec.clone(),
                     local_node_record.to_string(),
