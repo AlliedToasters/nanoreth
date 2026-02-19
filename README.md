@@ -12,6 +12,10 @@ This fork adds fixes needed for testnet sync with local block sources:
 
 2. **Init-state path validation**: Prevents a cryptic "Is a directory" error when `init-state` is given a directory instead of a file.
 
+3. **yParity normalization**: Normalizes legacy `yParity` values (27/28) to 0/1 during S3 block deserialization. Some older testnet blocks use pre-EIP-155 parity encoding, which causes deserialization failures without this fix.
+
+4. **Pseudo peer hash cache fix**: Caches block hash-to-number mappings during `GetBlockHeaders` responses and increases the LRU cache from 1M to 15M entries. Without this, the `GetBlockBodies` handler (which receives requests by hash) triggers slow backfill scans that block the pseudo peer event loop, causing protocol timeout disconnects. Also removes the public RPC fallback in favor of hard failure for faster debugging.
+
 ### Branch structure
 
 - **`main`**: All fixes on top of upstream `node-builder` — use this to run the testnet node
@@ -106,24 +110,89 @@ Nanoreth also extends reth's block types with Hyperliquid-specific fields (`syst
 
 ## How to run (testnet)
 
-Testnet is supported since block 34112653.
+Testnet is supported since block 34,112,653. This fork includes fixes needed for testnet sync with local block sources (see [Fork changes](#fork-changes)).
+
+### 1. Get testnet genesis
 
 ```sh
-# Get testnet genesis at block 34112653
-$ cd ~
-$ git clone https://github.com/sprites0/hl-testnet-genesis
-$ zstd --rm -d ~/hl-testnet-genesis/*.zst
+cd ~
+git clone https://github.com/sprites0/hl-testnet-genesis
+zstd --rm -d ~/hl-testnet-genesis/*.zst
+```
 
-# Init node
-$ make install
-$ reth-hl init-state --without-evm --chain testnet --header ~/hl-testnet-genesis/34112653.rlp \
+### 2. Initialize the database
+
+```sh
+make install
+reth-hl init-state --without-evm --chain testnet --header ~/hl-testnet-genesis/34112653.rlp \
   --header-hash 0xeb79aca618ab9fda6d463fddd3ad439045deada1f539cbab1c62d7e6a0f5859a \
   ~/hl-testnet-genesis/34112653.jsonl --total-difficulty 0
-
-# Run node
-$ reth-hl node --chain testnet --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 \
-    --ws --ws.addr 0.0.0.0 --ws.origins '*' --ws.api eth,ots,net,web3 --ingest-dir ~/evm-blocks --ws.port 8546
 ```
+
+### 3. Download blocks
+
+Download testnet blocks from S3 to a local cache (requires AWS credentials with requester-pays access):
+
+```sh
+aws s3 sync s3://hl-testnet-evm-blocks/ ~/evm-blocks --request-payer requester
+```
+
+Then fix known gaps in the S3 data:
+
+```sh
+pip install -r scripts/requirements.txt
+
+# Download boundary blocks (multiples of 1000) missed by an S3 bucketing bug
+python scripts/download_boundary_blocks.py --blocks-dir ~/evm-blocks
+
+# Verify completeness and re-download any remaining gaps from S3
+python scripts/check_block_completeness.py --blocks-dir ~/evm-blocks --fix
+
+# Fill from the local cache tip to the chain tip via public RPC (rate-limited)
+python scripts/fetch_blocks_rpc.py --blocks-dir ~/evm-blocks
+```
+
+### 4. Run the node
+
+```sh
+reth-hl node --chain testnet \
+  --block-source ~/evm-blocks \
+  --http --http.addr 0.0.0.0 --http.api eth,net,web3 \
+  --http.port 8545
+```
+
+### Docker
+
+```sh
+# Build the image
+docker build -t nanoreth .
+
+# Initialize (one-time)
+docker run --rm \
+  -v ~/.nanoreth-data:/root/.local/share/reth \
+  -v ~/hl-testnet-genesis:/genesis:ro \
+  nanoreth init-state --without-evm --chain testnet \
+  --header /genesis/34112653.rlp \
+  --header-hash 0xeb79aca618ab9fda6d463fddd3ad439045deada1f539cbab1c62d7e6a0f5859a \
+  /genesis/34112653.jsonl --total-difficulty 0
+
+# Run
+docker run -d --name nanoreth-testnet --network host \
+  -v ~/.nanoreth-data:/root/.local/share/reth \
+  -v ~/evm-blocks:/blocks:ro \
+  nanoreth node --chain testnet --block-source /blocks \
+  --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3
+```
+
+### Monitoring sync progress
+
+```sh
+curl -s -X POST http://127.0.0.1:8545 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"eth_syncing","id":1}' | python3 -m json.tool
+```
+
+The pipeline processes stages sequentially: Headers, Bodies, Execution, SenderRecovery, AccountHashing, StorageHashing, Merkle, TransactionLookup, IndexAccountHistory, IndexStorageHistory, Finish.
 
 ## Scripts
 
