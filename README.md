@@ -118,9 +118,64 @@ $ zstd --rm -d ~/hl-testnet-genesis/*.zst
 $ make install
 $ reth-hl init-state --without-evm --chain testnet --header ~/hl-testnet-genesis/34112653.rlp \
   --header-hash 0xeb79aca618ab9fda6d463fddd3ad439045deada1f539cbab1c62d7e6a0f5859a \
-  ~/hl-testnet-genesis/34112653.jsonl --total-difficulty 0 
+  ~/hl-testnet-genesis/34112653.jsonl --total-difficulty 0
 
 # Run node
 $ reth-hl node --chain testnet --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 \
     --ws --ws.addr 0.0.0.0 --ws.origins '*' --ws.api eth,ots,net,web3 --ingest-dir ~/evm-blocks --ws.port 8546
+```
+
+## Scripts
+
+The S3 block archive has gaps and boundary-block bucketing bugs. These Python scripts let operators audit their local block cache, fill gaps from S3, fetch missing blocks from the public RPC, and fix known bucketing issues — all without running the node itself.
+
+Install dependencies:
+
+```sh
+pip install -r scripts/requirements.txt
+```
+
+### check_block_completeness.py
+
+Scans the local block cache and reports missing blocks by comparing against the expected (height-1)-based directory layout.
+
+```sh
+# Full scan (auto-detects latest block)
+python scripts/check_block_completeness.py --blocks-dir /path/to/blocks
+
+# Scan a specific range
+python scripts/check_block_completeness.py --blocks-dir /path/to/blocks --start 45000000 --end 45010000
+
+# List every missing block
+python scripts/check_block_completeness.py --blocks-dir /path/to/blocks --verbose
+
+# Re-download missing blocks from S3
+python scripts/check_block_completeness.py --blocks-dir /path/to/blocks --fix
+```
+
+### fetch_blocks_rpc.py
+
+Fetches missing blocks from the public Hyperliquid testnet RPC and writes them in nanoreth's MessagePack + LZ4 format (Reth115 structure). Useful for filling gaps near the chain tip that aren't yet on S3. Rate-limited to ~120 calls/min.
+
+```sh
+# Fill from cache latest to chain tip
+python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks
+
+# Fill a specific range
+python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks --start 45895888 --end 46000000
+
+# Dry run
+python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks --dry-run
+```
+
+### download_boundary_blocks.py
+
+Downloads missing boundary blocks (multiples of 1000) from S3. These blocks were skipped by an earlier bucketing bug and need to be fetched separately.
+
+```sh
+# Download all missing boundary blocks
+python scripts/download_boundary_blocks.py --blocks-dir /path/to/blocks
+
+# Dry run (count only)
+python scripts/download_boundary_blocks.py --blocks-dir /path/to/blocks --dry-run
 ```
