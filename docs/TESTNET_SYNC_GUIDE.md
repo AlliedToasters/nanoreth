@@ -331,6 +331,34 @@ The `--size-only` flag compares file sizes rather than timestamps. RPC-fetched b
 
 ---
 
+### 5e. Fill the gap between S3 and hl-node (if needed)
+
+If hl-node is already producing EVM blocks (Step 1), there will be a gap between the latest block on S3 and the first block hl-node produced. For example, S3 might have blocks up to 46,041,000 while hl-node started producing at 46,178,846.
+
+**Use `check_block_completeness.py` with a targeted range** — not `aws s3 sync`:
+
+```sh
+# Check your S3 cache tip
+ls ~/evm-blocks/ | sort -n | tail -1  # e.g. 46000000
+ls ~/evm-blocks/46000000/ | sort -n | tail -1  # e.g. 46040000
+
+# Check hl-node's first EVM block
+head -1 ~/hl/data/evm_block_and_receipts/hourly/*/0 | python3 -c "
+import sys, json; d = json.loads(sys.stdin.read())
+print('First hl-node block:', int(d[1]['block']['Reth115']['header']['header']['number'], 16))
+"
+
+# Fill the gap with targeted S3 download (fast — only fetches what's missing)
+python scripts/check_block_completeness.py --blocks-dir ~/evm-blocks \
+  --start 46041001 --end 46185000 --fix
+```
+
+This is **much faster** than `aws s3 sync`, which scans the entire 170+ GB bucket. The completeness script uses boto3 to download only the missing blocks in parallel (32 workers by default). A 144K block gap takes ~15 minutes.
+
+> **Note**: Blocks at the very tip of the gap may fail to download (S3 lags a few hours behind the chain). That's fine — hl-node's hourly files cover from its start block onward, so as long as the gap overlaps, nanoreth has continuous coverage.
+
+---
+
 ## Step 6: Start nanoreth
 
 By now hl-node should be producing EVM block files (check `ls ~/hl/data/evm_block_and_receipts/hourly/`). If not, nanoreth will still work from the static block cache alone — you can add hl-node later.

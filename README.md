@@ -182,6 +182,13 @@ python scripts/check_block_completeness.py --blocks-dir ~/evm-blocks --fix
 python scripts/fetch_blocks_rpc.py --blocks-dir ~/evm-blocks
 ```
 
+If there's a gap between your S3 cache and hl-node's first block, fill it with a targeted download (much faster than re-running `aws s3 sync`):
+
+```sh
+python scripts/check_block_completeness.py --blocks-dir ~/evm-blocks \
+  --start <CACHE_TIP+1> --end <HL_NODE_FIRST_BLOCK> --fix
+```
+
 ### 5. Run the node
 
 ```sh
