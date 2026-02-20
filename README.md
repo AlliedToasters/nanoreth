@@ -1,6 +1,6 @@
 # nanoreth (testnet fork)
 
-Fork of [hl-archive-node/nanoreth](https://github.com/hl-archive-node/nanoreth) focused on running a **HyperEVM testnet** archive node for NFT sales indexing.
+Fork of [hl-archive-node/nanoreth](https://github.com/hl-archive-node/nanoreth) focused on running a **HyperEVM testnet** archive node.
 
 Upstream nanoreth is a HyperEVM archive node implementation based on [reth](https://github.com/paradigmxyz/reth). See the [upstream README](https://github.com/hl-archive-node/nanoreth) for general documentation.
 
@@ -163,6 +163,106 @@ reth-hl node --chain testnet \
   --http.port 8545
 ```
 
+### 5. Stay at the chain tip with hl-node (recommended)
+
+Steps 3-4 sync from a static block cache, but to follow the chain tip in real-time you need a local hl-node producing blocks. nanoreth's `--local-ingest-dir` tails hl-node's hourly JSONL output files, falling back to the static cache for historical blocks.
+
+**Install hl-visor** (the hl-node process manager):
+
+```sh
+# Import Hyperliquid's GPG key for binary verification
+curl -sL https://raw.githubusercontent.com/hyperliquid-dex/node/main/pub_key.asc | gpg --import
+
+# Download hl-visor
+curl https://binaries.hyperliquid-testnet.xyz/Testnet/hl-visor > ~/hl-visor
+chmod a+x ~/hl-visor
+echo '{"chain": "Testnet"}' > ~/visor.json
+```
+
+**Open ports 4001 and 4002 (required):**
+
+hl-node uses ports 4001 and 4002 for gossip. These **must be publicly accessible** — without them, your node IP gets deprioritized by peers and the initial ABCI state download (~272 MB) will fail or take hours. If you're behind NAT (home router, etc.), set up port forwarding for **4001 TCP** and **4002 TCP** to your machine's local IP.
+
+**Speed up bootstrapping with a peer list (recommended):**
+
+By default hl-node discovers peers randomly, which can be slow. Create `~/override_gossip_config.json` to connect directly to known-good peers:
+
+```sh
+# Fetch a curated testnet peer list
+curl -s https://hyperliquid-peers.all4nodes.io/ > ~/override_gossip_config.json
+```
+
+Or create it manually:
+
+```json
+{
+  "root_node_ips": [{"Ip": "1.2.3.4"}, {"Ip": "5.6.7.8"}],
+  "try_new_peers": false,
+  "chain": "Testnet"
+}
+```
+
+With `try_new_peers: false`, hl-node only connects to the listed peers instead of cycling through random ones.
+
+**Fix IPv4/IPv6 detection (dual-stack systems):**
+
+On systems with both IPv4 and IPv6, hl-visor's IP detection may fail. Add this to `/etc/gai.conf` to prefer IPv4:
+
+```sh
+echo "precedence ::ffff:0:0/96  100" | sudo tee -a /etc/gai.conf
+```
+
+**Start hl-node:**
+
+```sh
+~/hl-visor run-non-validator --serve-evm-rpc --disable-output-file-buffering
+```
+
+- `--serve-evm-rpc`: exposes EVM JSON-RPC on `localhost:3001/evm`
+- `--disable-output-file-buffering`: **critical** — flushes EVM blocks to disk immediately so nanoreth can tail them
+
+**Monitor bootstrap progress:**
+
+hl-node must download the ABCI state (~272 MB) from a peer before it can start applying blocks. This can take anywhere from a few minutes (with port forwarding + good peers) to hours (without).
+
+```sh
+# Check if bootstrap is progressing (look for "reading bytes for abci_stream")
+grep "reading bytes" ~/hl-visor.log
+
+# Check if blocks are being applied (means bootstrap is complete)
+grep "applied block" ~/hl-visor.log | tail -5
+
+# Check if EVM block files are being produced
+ls ~/hl/data/evm_block_and_receipts/hourly/
+```
+
+**Troubleshooting slow bootstrap:**
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| "early eof" on every peer | Ports 4001/4002 not reachable | Set up port forwarding |
+| "Peer no quorum app hash" | Peer hasn't synced yet | Use `override_gossip_config.json` with known-good peers |
+| "could not read abci state" loops | NAT + random peer discovery | Both port forwarding and gossip config |
+| Downloads start but disconnect | Unstable connection to peer | Try peers geographically closer to you |
+
+Wait for hl-node to start producing blocks (hourly files appear):
+
+```sh
+ls ~/hl/data/evm_block_and_receipts/hourly/
+```
+
+**Run nanoreth with both sources:**
+
+```sh
+reth-hl node --chain testnet \
+  --block-source ~/evm-blocks \
+  --local-ingest-dir ~/hl/data/evm_block_and_receipts \
+  --http --http.addr 0.0.0.0 --http.api eth,net,web3 \
+  --http.port 8545
+```
+
+nanoreth tails the hourly files every 25ms and falls back to the static cache after 5 seconds.
+
 ### Docker
 
 ```sh
@@ -178,11 +278,20 @@ docker run --rm \
   --header-hash 0xeb79aca618ab9fda6d463fddd3ad439045deada1f539cbab1c62d7e6a0f5859a \
   /genesis/34112653.jsonl --total-difficulty 0
 
-# Run
+# Run (static cache only)
 docker run -d --name nanoreth-testnet --network host \
   -v ~/.nanoreth-data:/root/.local/share/reth \
   -v ~/evm-blocks:/blocks:ro \
   nanoreth node --chain testnet --block-source /blocks \
+  --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3
+
+# Run (with hl-node for real-time blocks — see step 5)
+docker run -d --name nanoreth-testnet --network host \
+  -v ~/.nanoreth-data:/root/.local/share/reth \
+  -v ~/evm-blocks:/blocks:ro \
+  -v ~/hl/data/evm_block_and_receipts:/hl-blocks:ro \
+  nanoreth node --chain testnet --block-source /blocks \
+  --local-ingest-dir /hl-blocks \
   --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3
 ```
 
