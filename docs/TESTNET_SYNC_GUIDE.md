@@ -63,12 +63,20 @@ TransactionLookup -> IndexStorageHistory -> IndexAccountHistory -> Finish
 | AWS CLI | For S3 block downloads (`aws s3 sync`) |
 | AWS credentials | Requester-pays access to `s3://hl-testnet-evm-blocks` |
 | Python 3.8+ | For gap-filling scripts |
-| ~200 GB disk | ~170 GB for blocks, ~16 GB for reth DB, ~2 GB for hl-node data |
 | Open ports 4001/4002 TCP | Required for hl-node gossip (see Step 1) |
 
-### Hardware reference
+### Hardware requirements
 
-Tested on: AMD Ryzen 9 9950X (16 cores), 128 GB RAM, 3.6 TB NVMe. During active sync, hl-node uses ~6 GB RAM and ~10% CPU; nanoreth uses ~50 MB RAM at idle, more during pipeline execution. Modest hardware should work fine — the bottleneck is I/O and network, not compute.
+Based on observed resource usage running both hl-node and nanoreth on testnet (block 46M+, Feb 2025):
+
+| Resource | Minimum | Recommended | Notes |
+|----------|---------|-------------|-------|
+| **CPU** | 4 cores | 8+ cores | hl-node uses ~1 core during L1 catch-up; nanoreth uses <1 core at chain tip. Extra cores help during initial pipeline execution. |
+| **RAM** | 16 GB | 32 GB | hl-node peaks at ~6 GB, nanoreth ~2 GB. 16 GB is tight but workable; 32 GB gives comfortable headroom. |
+| **Disk** | 500 GB SSD | 1 TB+ NVMe | Block cache ~200 GB (and growing), nanoreth DB ~16 GB, hl-node data ~4 GB. NVMe recommended for pipeline I/O during initial sync. Budget for chain growth — the block cache grows ~5 GB/month. |
+| **Network** | 50 Mbps | 100+ Mbps | Initial S3 download is 170+ GB. Ports 4001/4002 TCP must be publicly accessible for hl-node gossip. |
+
+**Observed usage on our test system** (Ryzen 9 9950X, 128 GB RAM, 3.6 TB NVMe): CPU 1-2% idle, RAM 31% used (38 GB across all processes), disk 23% used (800 GB). The node cluster is not resource-intensive — the bottleneck during initial sync is network bandwidth for the S3 download, not compute.
 
 ---
 
