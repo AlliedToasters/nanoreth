@@ -6,12 +6,13 @@ Complete guide to syncing a nanoreth testnet archive node from scratch, includin
 
 - [Architecture Overview](#architecture-overview)
 - [Prerequisites](#prerequisites)
-- [Step 1: Build nanoreth](#step-1-build-nanoreth)
-- [Step 2: Get testnet genesis](#step-2-get-testnet-genesis)
-- [Step 3: Initialize the database](#step-3-initialize-the-database)
-- [Step 4: Download blocks](#step-4-download-blocks)
-- [Step 5: Start the node](#step-5-start-the-node)
-- [Step 6: Monitor sync progress](#step-6-monitor-sync-progress)
+- [Step 1: Start hl-node (do this first)](#step-1-start-hl-node-do-this-first)
+- [Step 2: Build nanoreth](#step-2-build-nanoreth)
+- [Step 3: Get testnet genesis](#step-3-get-testnet-genesis)
+- [Step 4: Initialize the database](#step-4-initialize-the-database)
+- [Step 5: Download blocks from S3](#step-5-download-blocks-from-s3)
+- [Step 6: Start nanoreth](#step-6-start-nanoreth)
+- [Step 7: Monitor sync progress](#step-7-monitor-sync-progress)
 - [Troubleshooting](#troubleshooting)
 - [Operational Notes](#operational-notes)
 
@@ -29,6 +30,15 @@ Key implications:
 - Blocks include HyperLiquid-specific fields: `system_tx_count`, `read_precompile_calls`, `highest_precompile_address`.
 - The chain is **post-merge from block 0** (Paris TTD=0). All hardforks through Cancun are active at genesis.
 - Chain ID is **998** (testnet).
+
+### How the two data sources work together
+
+Nanoreth uses two block sources that serve complementary roles:
+
+- **`--block-source`** (S3 or local cache): Provides the historical block archive — the bulk of the chain data. This is pre-downloaded or fetched on demand from S3.
+- **`--local-ingest-dir`** (hl-node output): Provides real-time blocks at the chain tip. nanoreth tails hl-node's hourly JSONL output files every 25ms, falling back to the static block source after 5 seconds.
+
+Together, the static cache covers the historical backfill while hl-node keeps you at the chain tip.
 
 ### Sync pipeline stages
 
@@ -53,11 +63,133 @@ TransactionLookup -> IndexStorageHistory -> IndexAccountHistory -> Finish
 | AWS CLI | For S3 block downloads (`aws s3 sync`) |
 | AWS credentials | Requester-pays access to `s3://hl-testnet-evm-blocks` |
 | Python 3.8+ | For gap-filling scripts |
-| ~200 GB disk | ~170 GB for blocks, ~16 GB for reth DB, headroom for growth |
+| ~200 GB disk | ~170 GB for blocks, ~16 GB for reth DB, ~2 GB for hl-node data |
+| Open ports 4001/4002 TCP | Required for hl-node gossip (see Step 1) |
+
+### Hardware reference
+
+Tested on: AMD Ryzen 9 9950X (16 cores), 128 GB RAM, 3.6 TB NVMe. During active sync, hl-node uses ~6 GB RAM and ~10% CPU; nanoreth uses ~50 MB RAM at idle, more during pipeline execution. Modest hardware should work fine — the bottleneck is I/O and network, not compute.
 
 ---
 
-## Step 1: Build nanoreth
+## Step 1: Start hl-node (do this first)
+
+**Why first?** hl-node must bootstrap by downloading ~272 MB of ABCI state from a peer, then catch up on L1 consensus rounds. This takes anywhere from 10 minutes to hours depending on your network. Starting it first lets it bootstrap while you set up everything else in parallel.
+
+### 1a. Open ports 4001 and 4002
+
+hl-node uses these ports for gossip. They **must be publicly accessible** — without them, your node IP gets deprioritized by peers and the ABCI state download will fail or take hours.
+
+If you're behind NAT (home router, cloud security group, etc.), set up port forwarding for **4001 TCP** and **4002 TCP** to your machine's local IP.
+
+### 1b. Install hl-visor
+
+```sh
+# Import Hyperliquid's GPG key for binary verification
+curl -sL https://raw.githubusercontent.com/hyperliquid-dex/node/main/pub_key.asc | gpg --import
+
+# Download hl-visor (the hl-node process manager)
+curl https://binaries.hyperliquid-testnet.xyz/Testnet/hl-visor > ~/hl-visor
+chmod a+x ~/hl-visor
+echo '{"chain": "Testnet"}' > ~/visor.json
+```
+
+### 1c. Speed up bootstrapping with a peer list (recommended)
+
+By default hl-node discovers peers randomly, which can be slow. Create `~/override_gossip_config.json` to connect directly to known-good peers:
+
+```sh
+# Fetch a curated testnet peer list
+curl -s https://hyperliquid-peers.all4nodes.io/ > ~/override_gossip_config.json
+```
+
+Or create it manually:
+
+```json
+{
+  "root_node_ips": [{"Ip": "1.2.3.4"}, {"Ip": "5.6.7.8"}],
+  "try_new_peers": false,
+  "chain": "Testnet"
+}
+```
+
+With `try_new_peers: false`, hl-node only connects to the listed peers instead of cycling through random ones.
+
+### 1d. Fix IPv4/IPv6 detection (dual-stack systems only)
+
+On systems with both IPv4 and IPv6, hl-visor's IP detection may fail. Add this to `/etc/gai.conf` to prefer IPv4:
+
+```sh
+echo "precedence ::ffff:0:0/96  100" | sudo tee -a /etc/gai.conf
+```
+
+### 1e. Start hl-node
+
+```sh
+# Run in the background (or use screen/tmux)
+nohup ~/hl-visor run-non-validator --serve-evm-rpc --disable-output-file-buffering \
+  > ~/hl-visor.log 2>&1 &
+```
+
+- `--serve-evm-rpc`: exposes EVM JSON-RPC on `localhost:3001/evm`
+- `--disable-output-file-buffering`: **critical** — flushes EVM blocks to disk immediately so nanoreth can tail them
+
+### 1f. Monitor bootstrap progress
+
+hl-node must download the ABCI state from a peer, then catch up on L1 consensus rounds before it starts producing EVM block files.
+
+```sh
+# Check if ABCI state download is progressing
+grep -a "reading bytes" ~/hl-visor.log
+
+# Check if blocks are being applied (means ABCI state was downloaded)
+grep -a "applied block" ~/hl-visor.log | tail -5
+
+# Check if EVM block files are being produced (means fully caught up)
+ls ~/hl/data/evm_block_and_receipts/hourly/
+```
+
+**Troubleshooting slow bootstrap:**
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| "early eof" on every peer | Ports 4001/4002 not reachable | Set up port forwarding |
+| "Peer no quorum app hash" | Peer hasn't synced yet | Use `override_gossip_config.json` with known-good peers |
+| "could not read abci state" loops | NAT + random peer discovery | Both port forwarding and gossip config |
+| Downloads start but disconnect | Unstable connection to peer | Try peers geographically closer to you |
+
+### 1g. Install the watchdog (recommended)
+
+Hyperliquid pushes hardfork upgrades to testnet **without warning**. When this happens, hl-node crashes with an assertion error like:
+
+```
+Hardfork { version: 1240, round: Round(637522063) } != Hardfork { version: 1239, round: Round(637459125) }
+```
+
+hl-visor is supposed to auto-update, but a hard crash requires downloading the new binary and restarting manually. The included watchdog script automates this:
+
+```sh
+# Copy to home directory
+cp scripts/hl-visor-watchdog.sh ~/
+chmod +x ~/hl-visor-watchdog.sh
+
+# Add to crontab (checks every 5 minutes)
+(crontab -l 2>/dev/null; echo "*/5 * * * * $HOME/hl-visor-watchdog.sh >> $HOME/hl-visor-watchdog.log 2>&1") | crontab -
+```
+
+The watchdog:
+1. Checks if hl-visor is running — exits silently if it is (no-op)
+2. If crashed, checks the log for a hardfork assertion error
+3. If a hardfork crash, downloads the latest binary automatically
+4. Restarts hl-visor
+
+Configure via environment variables if your paths differ from defaults: `HL_VISOR_BIN`, `HL_VISOR_LOG`, `HL_CHAIN` (Testnet/Mainnet).
+
+> **Now proceed to Steps 2-5 while hl-node bootstraps.** You don't need to wait for it to finish.
+
+---
+
+## Step 2: Build nanoreth
 
 ### Option A: Native build
 
@@ -83,7 +215,7 @@ Build takes 15-30 minutes (Rust release compilation).
 
 ---
 
-## Step 2: Get testnet genesis
+## Step 3: Get testnet genesis
 
 ```sh
 cd ~
@@ -97,7 +229,7 @@ This provides state snapshots at various block heights. Use the latest available
 
 ---
 
-## Step 3: Initialize the database
+## Step 4: Initialize the database
 
 This seeds reth's database with the account/storage state at block 34,112,653. The node will sync forward from there.
 
@@ -137,24 +269,24 @@ docker run --rm \
 
 ---
 
-## Step 4: Download blocks
+## Step 5: Download blocks from S3
 
-This is the most time-consuming step and the most error-prone. The block data lives in S3 as MessagePack + LZ4 compressed files, organized in a height-1 bucketed directory structure:
+This is the most time-consuming step. The block data lives in S3 as MessagePack + LZ4 compressed files, organized in a height-1 bucketed directory structure:
 
 ```
 {million}/{thousand}/{block_number}.rmp.lz4
 # Example: 45000000/45895000/45895963.rmp.lz4
 ```
 
-### 4a. Sync from S3 (primary source)
+### 5a. Sync from S3 (primary source)
 
 ```sh
 aws s3 sync s3://hl-testnet-evm-blocks/ ~/evm-blocks --request-payer requester
 ```
 
-This downloads ~170 GB. Takes several hours depending on bandwidth. You can run the node before the download completes — it will sync as far as blocks are available.
+This downloads ~170 GB. Takes several hours depending on bandwidth. You can start nanoreth before the download completes — it will sync as far as blocks are available and pick up new blocks as they appear.
 
-### 4b. Fix boundary block gaps
+### 5b. Fix boundary block gaps
 
 An S3 bucketing bug causes blocks at exact multiples of 1000 to be placed in the wrong directory. Download them separately:
 
@@ -163,7 +295,7 @@ pip install -r scripts/requirements.txt
 python scripts/download_boundary_blocks.py --blocks-dir ~/evm-blocks
 ```
 
-### 4c. Verify completeness
+### 5c. Verify completeness
 
 ```sh
 python scripts/check_block_completeness.py --blocks-dir ~/evm-blocks --fix
@@ -171,7 +303,7 @@ python scripts/check_block_completeness.py --blocks-dir ~/evm-blocks --fix
 
 The `--fix` flag re-downloads any blocks still missing from S3.
 
-### 4d. Fill remaining gaps from public RPC
+### 5d. Fill remaining gaps from public RPC (optional)
 
 S3 has a few hundred genuine gaps. Fill them from the public testnet RPC:
 
@@ -199,9 +331,21 @@ The `--size-only` flag compares file sizes rather than timestamps. RPC-fetched b
 
 ---
 
-## Step 5: Start the node
+## Step 6: Start nanoreth
 
-### Native
+By now hl-node should be producing EVM block files (check `ls ~/hl/data/evm_block_and_receipts/hourly/`). If not, nanoreth will still work from the static block cache alone — you can add hl-node later.
+
+### Native (with both sources — recommended)
+
+```sh
+reth-hl node --chain testnet \
+  --block-source ~/evm-blocks \
+  --local-ingest-dir ~/hl/data/evm_block_and_receipts \
+  --http --http.addr 0.0.0.0 --http.api eth,net,web3 \
+  --http.port 8545
+```
+
+### Native (static cache only)
 
 ```sh
 reth-hl node --chain testnet \
@@ -210,7 +354,19 @@ reth-hl node --chain testnet \
   --http.port 8545
 ```
 
-### Docker
+### Docker (with both sources — recommended)
+
+```sh
+docker run -d --name nanoreth-testnet --network host \
+  -v ~/.nanoreth-data:/root/.local/share/reth \
+  -v ~/evm-blocks:/blocks:ro \
+  -v ~/hl/data/evm_block_and_receipts:/hl-blocks:ro \
+  nanoreth node --chain testnet --block-source /blocks \
+  --local-ingest-dir /hl-blocks \
+  --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3
+```
+
+### Docker (static cache only)
 
 ```sh
 docker run -d --name nanoreth-testnet --network host \
@@ -244,7 +400,7 @@ This is the best option for complete data — the `rpc://` source includes `read
 
 ---
 
-## Step 6: Monitor sync progress
+## Step 7: Monitor sync progress
 
 ### Check pipeline stages
 
@@ -405,16 +561,13 @@ reth-hl stage run --chain testnet --from 45612676 --to 46041000 --commit --skip-
 
 ### Keeping the node up to date
 
-The node syncs to whatever blocks are available in the block source directory. To advance:
+With hl-node running and `--local-ingest-dir` configured, nanoreth follows the chain tip automatically. For the static block cache:
 
 ```sh
-# Sync latest blocks from S3
+# Periodically sync latest blocks from S3
 aws s3 sync s3://hl-testnet-evm-blocks/ ~/evm-blocks --request-payer requester
 
-# Fill tip from RPC (for blocks not yet on S3)
-python scripts/fetch_blocks_rpc.py --blocks-dir ~/evm-blocks
-
-# Restart the node to pick up new blocks
+# Restart nanoreth to pick up blocks beyond its current forkchoice target
 docker restart nanoreth-testnet
 ```
 

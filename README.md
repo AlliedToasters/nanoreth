@@ -114,7 +114,35 @@ Nanoreth also extends reth's block types with Hyperliquid-specific fields (`syst
 
 Testnet is supported since block 34,112,653. This fork includes fixes needed for testnet sync with local block sources (see [Fork changes](#fork-changes)).
 
-### 1. Get testnet genesis
+> **For a comprehensive walkthrough** with troubleshooting, pitfalls, and operational details, see [docs/TESTNET_SYNC_GUIDE.md](docs/TESTNET_SYNC_GUIDE.md). The steps below are a quickstart.
+
+### 1. Start hl-node first
+
+hl-node takes the longest to bootstrap (~272 MB ABCI state download), so start it first and do the rest in parallel.
+
+**Ports 4001 and 4002 TCP must be publicly accessible** for gossip. Set up port forwarding if behind NAT.
+
+```sh
+# Install hl-visor
+curl -sL https://raw.githubusercontent.com/hyperliquid-dex/node/main/pub_key.asc | gpg --import
+curl https://binaries.hyperliquid-testnet.xyz/Testnet/hl-visor > ~/hl-visor
+chmod a+x ~/hl-visor
+echo '{"chain": "Testnet"}' > ~/visor.json
+
+# Speed up bootstrap with known-good peers (recommended)
+curl -s https://hyperliquid-peers.all4nodes.io/ > ~/override_gossip_config.json
+
+# Fix IPv4/IPv6 detection if needed (dual-stack systems)
+echo "precedence ::ffff:0:0/96  100" | sudo tee -a /etc/gai.conf
+
+# Start (runs in background)
+nohup ~/hl-visor run-non-validator --serve-evm-rpc --disable-output-file-buffering \
+  > ~/hl-visor.log 2>&1 &
+```
+
+Monitor: `grep -a "applied block" ~/hl-visor.log | tail -5` — once you see these, hl-node is synced.
+
+### 2. Get testnet genesis
 
 ```sh
 cd ~
@@ -122,7 +150,7 @@ git clone https://github.com/sprites0/hl-testnet-genesis
 zstd --rm -d ~/hl-testnet-genesis/*.zst
 ```
 
-### 2. Initialize the database
+### 3. Initialize the database
 
 ```sh
 make install
@@ -131,7 +159,7 @@ reth-hl init-state --without-evm --chain testnet --header ~/hl-testnet-genesis/3
   ~/hl-testnet-genesis/34112653.jsonl --total-difficulty 0
 ```
 
-### 3. Download blocks
+### 4. Download blocks
 
 Download testnet blocks from S3 to a local cache (requires AWS credentials with requester-pays access):
 
@@ -154,104 +182,7 @@ python scripts/check_block_completeness.py --blocks-dir ~/evm-blocks --fix
 python scripts/fetch_blocks_rpc.py --blocks-dir ~/evm-blocks
 ```
 
-### 4. Run the node
-
-```sh
-reth-hl node --chain testnet \
-  --block-source ~/evm-blocks \
-  --http --http.addr 0.0.0.0 --http.api eth,net,web3 \
-  --http.port 8545
-```
-
-### 5. Stay at the chain tip with hl-node (recommended)
-
-Steps 3-4 sync from a static block cache, but to follow the chain tip in real-time you need a local hl-node producing blocks. nanoreth's `--local-ingest-dir` tails hl-node's hourly JSONL output files, falling back to the static cache for historical blocks.
-
-**Install hl-visor** (the hl-node process manager):
-
-```sh
-# Import Hyperliquid's GPG key for binary verification
-curl -sL https://raw.githubusercontent.com/hyperliquid-dex/node/main/pub_key.asc | gpg --import
-
-# Download hl-visor
-curl https://binaries.hyperliquid-testnet.xyz/Testnet/hl-visor > ~/hl-visor
-chmod a+x ~/hl-visor
-echo '{"chain": "Testnet"}' > ~/visor.json
-```
-
-**Open ports 4001 and 4002 (required):**
-
-hl-node uses ports 4001 and 4002 for gossip. These **must be publicly accessible** — without them, your node IP gets deprioritized by peers and the initial ABCI state download (~272 MB) will fail or take hours. If you're behind NAT (home router, etc.), set up port forwarding for **4001 TCP** and **4002 TCP** to your machine's local IP.
-
-**Speed up bootstrapping with a peer list (recommended):**
-
-By default hl-node discovers peers randomly, which can be slow. Create `~/override_gossip_config.json` to connect directly to known-good peers:
-
-```sh
-# Fetch a curated testnet peer list
-curl -s https://hyperliquid-peers.all4nodes.io/ > ~/override_gossip_config.json
-```
-
-Or create it manually:
-
-```json
-{
-  "root_node_ips": [{"Ip": "1.2.3.4"}, {"Ip": "5.6.7.8"}],
-  "try_new_peers": false,
-  "chain": "Testnet"
-}
-```
-
-With `try_new_peers: false`, hl-node only connects to the listed peers instead of cycling through random ones.
-
-**Fix IPv4/IPv6 detection (dual-stack systems):**
-
-On systems with both IPv4 and IPv6, hl-visor's IP detection may fail. Add this to `/etc/gai.conf` to prefer IPv4:
-
-```sh
-echo "precedence ::ffff:0:0/96  100" | sudo tee -a /etc/gai.conf
-```
-
-**Start hl-node:**
-
-```sh
-~/hl-visor run-non-validator --serve-evm-rpc --disable-output-file-buffering
-```
-
-- `--serve-evm-rpc`: exposes EVM JSON-RPC on `localhost:3001/evm`
-- `--disable-output-file-buffering`: **critical** — flushes EVM blocks to disk immediately so nanoreth can tail them
-
-**Monitor bootstrap progress:**
-
-hl-node must download the ABCI state (~272 MB) from a peer before it can start applying blocks. This can take anywhere from a few minutes (with port forwarding + good peers) to hours (without).
-
-```sh
-# Check if bootstrap is progressing (look for "reading bytes for abci_stream")
-grep "reading bytes" ~/hl-visor.log
-
-# Check if blocks are being applied (means bootstrap is complete)
-grep "applied block" ~/hl-visor.log | tail -5
-
-# Check if EVM block files are being produced
-ls ~/hl/data/evm_block_and_receipts/hourly/
-```
-
-**Troubleshooting slow bootstrap:**
-
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| "early eof" on every peer | Ports 4001/4002 not reachable | Set up port forwarding |
-| "Peer no quorum app hash" | Peer hasn't synced yet | Use `override_gossip_config.json` with known-good peers |
-| "could not read abci state" loops | NAT + random peer discovery | Both port forwarding and gossip config |
-| Downloads start but disconnect | Unstable connection to peer | Try peers geographically closer to you |
-
-Wait for hl-node to start producing blocks (hourly files appear):
-
-```sh
-ls ~/hl/data/evm_block_and_receipts/hourly/
-```
-
-**Run nanoreth with both sources:**
+### 5. Run the node
 
 ```sh
 reth-hl node --chain testnet \
@@ -261,7 +192,7 @@ reth-hl node --chain testnet \
   --http.port 8545
 ```
 
-nanoreth tails the hourly files every 25ms and falls back to the static cache after 5 seconds.
+`--block-source` provides the historical block cache; `--local-ingest-dir` tails hl-node's real-time output. nanoreth polls the hourly files every 25ms and falls back to the static cache after 5 seconds.
 
 ### Docker
 
@@ -349,6 +280,21 @@ python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks --start 45895888
 # Dry run
 python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks --dry-run
 ```
+
+### hl-visor-watchdog.sh
+
+Cron-based watchdog that automatically restarts hl-visor after crashes. Hyperliquid pushes hardfork upgrades to testnet without warning — hl-node crashes with a version assertion error and needs a manual binary update + restart. This watchdog handles that automatically.
+
+```sh
+# Install: copy to your home directory and add to crontab
+cp scripts/hl-visor-watchdog.sh ~/
+chmod +x ~/hl-visor-watchdog.sh
+
+# Check every 5 minutes (add via `crontab -e`)
+*/5 * * * * /home/YOUR_USER/hl-visor-watchdog.sh >> ~/hl-visor-watchdog.log 2>&1
+```
+
+The script detects hardfork crashes by grepping the log, downloads a fresh binary if needed, and restarts. Configure via environment variables: `HL_VISOR_BIN`, `HL_VISOR_LOG`, `HL_CHAIN` (Testnet/Mainnet).
 
 ### download_boundary_blocks.py
 
