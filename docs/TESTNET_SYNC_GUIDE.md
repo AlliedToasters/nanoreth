@@ -2,6 +2,8 @@
 
 Complete guide to syncing a nanoreth testnet archive node from scratch, including all workarounds, pitfalls, and lessons learned from a full sync to block 46M+.
 
+> **Looking for mainnet?** See the [Mainnet Sync Guide](MAINNET_SYNC_GUIDE.md). The mainnet guide builds on this one — read this first for architecture and troubleshooting details.
+
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
@@ -29,7 +31,13 @@ Key implications:
 - `--bootnodes` and `--trusted-peers` will **not** trigger historical sync. You need `--block-source`.
 - Blocks include HyperLiquid-specific fields: `system_tx_count`, `read_precompile_calls`, `highest_precompile_address`.
 - The chain is **post-merge from block 0** (Paris TTD=0). All hardforks through Cancun are active at genesis.
-- Chain ID is **998** (testnet).
+- Chain ID is **998** (testnet), **999** (mainnet).
+
+### Why init-state is required
+
+The pseudo peer's P2P session times out after ~23 seconds. The headers stage doesn't checkpoint partway through — all downloaded headers are lost on disconnect. At ~1M headers per session, any chain with more than ~1M blocks **requires init-state** to bootstrap. Both testnet (46M+ blocks) and mainnet (28M+ blocks) are well past this threshold.
+
+Testnet has a public genesis repo (`sprites0/hl-testnet-genesis`). For mainnet, you must generate init-state yourself — see the [Mainnet Sync Guide](MAINNET_SYNC_GUIDE.md#step-3-generate-mainnet-init-state).
 
 ### How the two data sources work together
 
