@@ -19,7 +19,10 @@ from pathlib import Path
 import boto3
 from botocore.config import Config
 
-BUCKET = "hl-testnet-evm-blocks"
+CHAIN_CONFIG = {
+    "testnet": {"bucket": "hl-testnet-evm-blocks", "default_start": 18_000_000, "default_end": 46_000_000},
+    "mainnet": {"bucket": "hl-mainnet-evm-blocks", "default_start": 1, "default_end": 28_000_000},
+}
 REGION = "ap-northeast-1"
 
 
@@ -46,13 +49,13 @@ def find_missing_blocks(blocks_dir: Path, start: int, end: int) -> list[int]:
     return missing
 
 
-def download_block(s3_client, blocks_dir: Path, block_number: int) -> tuple[int, bool, str]:
+def download_block(s3_client, blocks_dir: Path, block_number: int, bucket: str) -> tuple[int, bool, str]:
     """Download a single block from S3. Returns (block, success, message)."""
     key = s3_key(block_number)
     dest = cache_path(blocks_dir, block_number)
     try:
         resp = s3_client.get_object(
-            Bucket=BUCKET, Key=key, RequestPayer="requester"
+            Bucket=bucket, Key=key, RequestPayer="requester"
         )
         data = resp["Body"].read()
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -66,19 +69,27 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--blocks-dir", required=True,
                         help="Local blocks directory")
-    parser.add_argument("--start", type=int, default=18_000_000,
-                        help="First boundary block (default: 18M, first on S3)")
-    parser.add_argument("--end", type=int, default=46_000_000,
-                        help="Last boundary block to check")
+    parser.add_argument("--chain", choices=["testnet", "mainnet"], default="testnet",
+                        help="Chain to use (determines S3 bucket and defaults)")
+    parser.add_argument("--start", type=int, default=None,
+                        help="First boundary block (default: per-chain S3 start)")
+    parser.add_argument("--end", type=int, default=None,
+                        help="Last boundary block to check (default: per-chain)")
     parser.add_argument("--workers", type=int, default=32,
                         help="Parallel download threads")
     parser.add_argument("--dry-run", action="store_true",
                         help="Only count missing blocks, don't download")
     args = parser.parse_args()
 
+    chain = CHAIN_CONFIG[args.chain]
+    if args.start is None:
+        args.start = chain["default_start"]
+    if args.end is None:
+        args.end = chain["default_end"]
+
     blocks_dir = Path(args.blocks_dir)
 
-    print(f"Scanning for missing boundary blocks [{args.start:,} - {args.end:,}]...")
+    print(f"Scanning for missing boundary blocks [{args.start:,} - {args.end:,}] ({args.chain})...")
     missing = find_missing_blocks(blocks_dir, args.start, args.end)
     print(f"Found {len(missing):,} missing boundary blocks")
 
@@ -91,7 +102,7 @@ def main():
     downloaded = 0
     failed = 0
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(download_block, s3, blocks_dir, h): h for h in missing}
+        futures = {pool.submit(download_block, s3, blocks_dir, h, chain["bucket"]): h for h in missing}
         for future in as_completed(futures):
             block_number, success, msg = future.result()
             if success:

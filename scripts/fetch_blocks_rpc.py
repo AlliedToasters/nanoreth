@@ -3,13 +3,16 @@
 Fetch missing blocks from public RPC and write them in nanoreth format.
 
 Scans the local block cache for gaps (relative to the chain tip) and fills them
-by fetching block data + receipts from the public Hyperliquid testnet RPC.
+by fetching block data + receipts from the public Hyperliquid RPC.
 
 Output format: MessagePack + LZ4 compressed, matching nanoreth's Reth115 structure.
 
 Usage:
-    # Fill tip gap (most common)
+    # Fill tip gap (testnet, default)
     python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks
+
+    # Fill tip gap (mainnet)
+    python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks --chain mainnet
 
     # Fill a specific range
     python scripts/fetch_blocks_rpc.py --blocks-dir /path/to/blocks --start 45895888 --end 46000000
@@ -40,7 +43,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-DEFAULT_RPC = "https://rpc.hyperliquid-testnet.xyz/evm"
+CHAIN_RPC = {
+    "testnet": "https://rpc.hyperliquid-testnet.xyz/evm",
+    "mainnet": "https://rpc.hyperliquid.xyz/evm",
+}
 BATCH_SIZE = 5  # blocks per RPC batch (x2 calls each = 10 RPC calls)
 BATCH_DELAY = 5.0  # seconds between batches (~120 calls/min, conservative)
 REQUEST_TIMEOUT = 30
@@ -387,10 +393,14 @@ def main():
         description="Fetch missing blocks from RPC into local nanoreth cache"
     )
     parser.add_argument(
-        "--rpc", default=DEFAULT_RPC, help="RPC endpoint URL"
+        "--rpc", default=None, help="RPC endpoint URL (default: per-chain public RPC)"
     )
     parser.add_argument(
         "--blocks-dir", required=True, help="Local blocks directory"
+    )
+    parser.add_argument(
+        "--chain", choices=["testnet", "mainnet"], default="testnet",
+        help="Chain to use (determines default RPC endpoint)"
     )
     parser.add_argument(
         "--start", type=int, default=None, help="Start block (default: cache latest + 1)"
@@ -413,6 +423,9 @@ def main():
         help="Scan for internal gaps in the range (slower)",
     )
     args = parser.parse_args()
+
+    if args.rpc is None:
+        args.rpc = CHAIN_RPC[args.chain]
 
     session = requests.Session()
 

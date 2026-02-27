@@ -17,8 +17,10 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-# S3 testnet range (EVM blocks start at 18M)
-S3_START = 18_000_000
+CHAIN_CONFIG = {
+    "testnet": {"bucket": "hl-testnet-evm-blocks", "s3_start": 18_000_000},
+    "mainnet": {"bucket": "hl-mainnet-evm-blocks", "s3_start": 1},
+}
 
 
 def expected_dir(block_number: int) -> tuple[int, int]:
@@ -87,12 +89,11 @@ def blocks_in_chunk(thousands_base: int, millions_base: int, latest: int) -> lis
     return blocks
 
 
-def download_blocks(blocks_dir: Path, missing: list[int], workers: int = 32) -> tuple[int, int]:
+def download_blocks(blocks_dir: Path, missing: list[int], bucket: str, workers: int = 32) -> tuple[int, int]:
     """Download missing blocks from S3. Returns (downloaded, failed)."""
     import boto3
     from botocore.config import Config
 
-    BUCKET = "hl-testnet-evm-blocks"
     REGION = "ap-northeast-1"
 
     config = Config(region_name=REGION, max_pool_connections=workers + 5)
@@ -103,7 +104,7 @@ def download_blocks(blocks_dir: Path, missing: list[int], workers: int = 32) -> 
         key = f"{m}/{t}/{bn}.rmp.lz4"
         dest = cache_path(blocks_dir, bn)
         try:
-            resp = s3.get_object(Bucket=BUCKET, Key=key, RequestPayer="requester")
+            resp = s3.get_object(Bucket=bucket, Key=key, RequestPayer="requester")
             data = resp["Body"].read()
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(data)
@@ -132,8 +133,10 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--blocks-dir", required=True,
                         help="Local blocks directory")
-    parser.add_argument("--start", type=int, default=S3_START,
-                        help=f"First block to check (default: {S3_START})")
+    parser.add_argument("--chain", choices=["testnet", "mainnet"], default="testnet",
+                        help="Chain to use (determines S3 bucket and defaults)")
+    parser.add_argument("--start", type=int, default=None,
+                        help="First block to check (default: per-chain S3 start)")
     parser.add_argument("--end", type=int, default=0,
                         help="Last block to check (default: auto-detect latest)")
     parser.add_argument("--verbose", "-v", action="store_true",
@@ -143,6 +146,10 @@ def main():
     parser.add_argument("--workers", type=int, default=32,
                         help="Parallel workers for --fix downloads")
     args = parser.parse_args()
+
+    chain = CHAIN_CONFIG[args.chain]
+    if args.start is None:
+        args.start = chain["s3_start"]
 
     blocks_dir = Path(args.blocks_dir)
 
@@ -211,13 +218,13 @@ def main():
 
     if args.fix and all_missing:
         # Only fix blocks in S3 range
-        fixable = [bn for bn in all_missing if bn >= S3_START]
+        fixable = [bn for bn in all_missing if bn >= chain["s3_start"]]
         unfixable = len(all_missing) - len(fixable)
         if unfixable:
-            print(f"\n{unfixable} missing blocks below S3 range ({S3_START:,}) -- skipping")
+            print(f"\n{unfixable} missing blocks below S3 range ({chain['s3_start']:,}) -- skipping")
         if fixable:
             print(f"\nDownloading {len(fixable):,} missing blocks from S3...")
-            downloaded, failed = download_blocks(blocks_dir, fixable, args.workers)
+            downloaded, failed = download_blocks(blocks_dir, fixable, chain["bucket"], args.workers)
             print(f"Done: {downloaded:,} downloaded, {failed:,} failed")
 
     return 1 if total_missing > 0 else 0
