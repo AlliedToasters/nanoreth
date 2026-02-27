@@ -139,6 +139,8 @@ On systems with both IPv4 and IPv6, hl-visor's IP detection may fail. Add this t
 echo "precedence ::ffff:0:0/96  100" | sudo tee -a /etc/gai.conf
 ```
 
+> **Docker note**: `network_mode: host` shares the network stack but **not** the container's filesystem. The host `/etc/gai.conf` is not inherited inside the container — you must also apply the fix in your Dockerfile (e.g. `RUN echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf`). Without this, hl-visor will log `invalid ip address` errors for IPv6 addresses and fail to establish gossip connections.
+
 ### 1e. Start hl-node
 
 ```sh
